@@ -43,6 +43,30 @@ export default function RoundSummaryModal({ summary }) {
           ))}
         </div>
 
+        {/* TDK Meaning Preview */}
+        {summary.wordDetail && summary.wordDetail.meanings?.[0] && (
+          <div className="my-2.5 p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200/70 text-left">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                🏛️ TDK Anlamı:
+              </span>
+              {summary.wordDetail.origin && (
+                <span className="text-[10px] text-amber-800 bg-amber-100/70 px-1.5 py-0.2 rounded font-medium italic">
+                  {summary.wordDetail.origin}
+                </span>
+              )}
+              {summary.wordDetail.meanings[0].tur && (
+                <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded font-semibold">
+                  {summary.wordDetail.meanings[0].tur}
+                </span>
+              )}
+            </div>
+            <p className="text-xs font-medium text-slate-800 leading-relaxed">
+              {summary.wordDetail.meanings[0].anlam}
+            </p>
+          </div>
+        )}
+
         {/* Round Leaderboard */}
         <div className="my-4 space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-left">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">

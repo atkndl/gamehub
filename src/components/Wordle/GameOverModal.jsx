@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { useGame } from '../../context/GameContext';
 import { toTurkishUpper } from '../../utils/turkish';
 import { Trophy, RotateCcw, Home, Sparkles, Award, Clock, Target, CheckCircle2, LogOut } from 'lucide-react';
+import TDKWordCard from './TDKWordCard';
 
 export default function GameOverModal({ data }) {
   const { player, rematch, returnToLobby, leaveRoom } = useGame();
@@ -29,6 +30,7 @@ export default function GameOverModal({ data }) {
   const room = data.room;
   const isSpeedMode = data.mode === 'speed' || room?.wordleSession?.mode === 'speed';
   const words = data.words || room?.wordleSession?.words || [];
+  const wordDetails = data.wordDetails || room?.wordleSession?.wordDetails || {};
   const totalWordsCount = words.length || 5;
 
   // Use pre-sorted authoritative leaderboard from socket, or fallback
@@ -212,23 +214,9 @@ export default function GameOverModal({ data }) {
           </div>
         </div>
 
-        {/* Words Revealed list */}
+        {/* Words Revealed & TDK Educational Cards */}
         {words.length > 0 && (
-          <div className="mb-5 p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-left">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-              Kelime Cevapları:
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {words.map((w, idx) => (
-                <span
-                  key={idx}
-                  className="px-2.5 py-1 rounded-xl bg-white border border-slate-200/80 font-heading font-bold text-xs text-slate-800 shadow-2xs"
-                >
-                  {toTurkishUpper(w)}
-                </span>
-              ))}
-            </div>
-          </div>
+          <TDKWordCard words={words} wordDetails={wordDetails} />
         )}
 
         {/* Action Controls for Host and Players */}

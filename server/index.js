@@ -20,6 +20,11 @@ import {
   getWordStats,
   calculateLeaderboard
 } from './roomManager.js';
+import {
+  getWordDetails,
+  getWordsDetailsMap,
+  getTDKStats
+} from './tdkService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,12 +51,43 @@ app.get('/api/words/stats', (req, res) => {
   res.json(getWordStats());
 });
 
+app.get('/api/tdk/stats', (req, res) => {
+  res.json({ success: true, ...getTDKStats() });
+});
+
+app.get('/api/tdk/:word', async (req, res) => {
+  try {
+    const details = await getWordDetails(req.params.word);
+    res.json({ success: true, data: details });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Serve frontend in production
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
 
 // Round advance timeouts
 const activeTimers = new Map();
+
+/**
+ * Helper to broadcast authoritative game over event with rich TDK definitions
+ */
+async function emitGameOver(room, leaderboard, mode) {
+  room.gameState = 'game_over';
+  const words = room.wordleSession?.words || [];
+  const wordDetails = await getWordsDetailsMap(words);
+  console.log(`[Game Over Broadcast] Room ${room.code}, Mode: ${mode}, Words:`, words);
+  io.to(room.code).emit('game_over', {
+    room,
+    leaderboard,
+    playerProgress: room.wordleSession?.playerProgress || {},
+    words,
+    wordDetails,
+    mode
+  });
+}
 
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`);
@@ -120,7 +156,7 @@ io.on('connection', (socket) => {
   });
 
   // Wordle Guess
-  socket.on('wordle_guess', ({ guess }, callback) => {
+  socket.on('wordle_guess', async ({ guess }, callback) => {
     try {
       const result = handleWordleGuess(socket.id, guess);
       if (result.error) {
@@ -155,19 +191,14 @@ io.on('connection', (socket) => {
       if (room.wordleSession.mode === 'speed' && result.gameOver) {
         console.log(`[Speed Mode Game Over] Room ${room.code}`);
         const leaderboard = result.leaderboard || calculateLeaderboard(room);
-        io.to(room.code).emit('game_over', {
-          room,
-          leaderboard,
-          playerProgress: room.wordleSession.playerProgress,
-          words: room.wordleSession.words,
-          mode: 'speed'
-        });
+        await emitGameOver(room, leaderboard, 'speed');
       }
 
       // Handle Score Mode Round Finished (all players completed current word)
       if (room.wordleSession.mode === 'score' && result.roundFinishedAll) {
         const session = room.wordleSession;
         const currentTargetWord = session.words[session.roundIndex];
+        const currentWordTdk = await getWordDetails(currentTargetWord);
 
         // Rank players for this round
         const roundRankings = Object.values(session.playerProgress).map(p => ({
@@ -184,6 +215,7 @@ io.on('connection', (socket) => {
           roundIndex: session.roundIndex,
           wordCount: session.wordCount,
           targetWord: currentTargetWord,
+          wordDetail: currentWordTdk,
           rankings: roundRankings,
           isFinalRound: session.roundIndex + 1 >= session.wordCount,
           nextRoundIn: 5 // seconds countdown
@@ -203,20 +235,14 @@ io.on('connection', (socket) => {
         }
 
         // Schedule next round after 5 seconds
-        const timerId = setTimeout(() => {
+        const timerId = setTimeout(async () => {
           activeTimers.delete(room.code);
           const advanceResult = advanceScoreModeRound(room.code);
           if (!advanceResult) return;
 
           if (advanceResult.gameOver) {
             const leaderboard = advanceResult.leaderboard || calculateLeaderboard(advanceResult.room);
-            io.to(room.code).emit('game_over', {
-              room: advanceResult.room,
-              leaderboard,
-              playerProgress: advanceResult.room.wordleSession.playerProgress,
-              words: advanceResult.room.wordleSession.words,
-              mode: 'score'
-            });
+            await emitGameOver(advanceResult.room, leaderboard, 'score');
           } else if (advanceResult.nextRound) {
             io.to(room.code).emit('next_round_started', {
               room: advanceResult.room,
@@ -277,21 +303,14 @@ io.on('connection', (socket) => {
     if (typeof callback === 'function') callback({ success: true });
   });
 
-  const checkGameCompletion = (room) => {
+  const checkGameCompletion = async (room) => {
     if (room && room.gameState === 'playing' && room.wordleSession?.mode === 'speed') {
       const connectedIds = new Set(room.players.map(p => p.id));
       const activeProgresses = Object.values(room.wordleSession.playerProgress).filter(p => connectedIds.has(p.playerId));
       const allFinished = activeProgresses.length > 0 && activeProgresses.every(p => p.isGameFinished);
       if (allFinished) {
-        room.gameState = 'game_over';
         const leaderboard = calculateLeaderboard(room);
-        io.to(room.code).emit('game_over', {
-          room,
-          leaderboard,
-          playerProgress: room.wordleSession.playerProgress,
-          words: room.wordleSession.words,
-          mode: 'speed'
-        });
+        await emitGameOver(room, leaderboard, 'speed');
       }
     }
   };

@@ -202,7 +202,7 @@ export default function WordleConfigModal({ isOpen, onClose }) {
           <div>
             <label className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5 mb-2">
               <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
-              Kelime Zorluğu / Havuzu
+              Kelime Havuzu (TDK Resmi Sözlük)
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -215,7 +215,7 @@ export default function WordleConfigModal({ isOpen, onClose }) {
                     : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 } ${!isHost ? 'cursor-default' : 'cursor-pointer'}`}
               >
-                <span>⭐ Yaygın Kelimeler (Önerilen)</span>
+                <span>⭐ Standart TDK (Önerilen)</span>
               </button>
 
               <button
@@ -228,7 +228,7 @@ export default function WordleConfigModal({ isOpen, onClose }) {
                     : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                 } ${!isHost ? 'cursor-default' : 'cursor-pointer'}`}
               >
-                <span>🔥 Tüm Sözlük (Zor Mod)</span>
+                <span>🏛️ Tüm TDK Sözlüğü</span>
               </button>
             </div>
           </div>

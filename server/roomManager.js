@@ -9,10 +9,12 @@ const __dirname = path.dirname(__filename);
 // Load words
 const wordsPath = path.join(__dirname, 'words.json');
 const targetWordsPath = path.join(__dirname, 'target_words.json');
+const tdkWordsPath = path.join(__dirname, 'tdk_words_5.json');
 
 let allWordsList = [];
 let allWordsSet = new Set();
 let targetWordsList = [];
+let allTdkWordsList = [];
 
 try {
   allWordsList = JSON.parse(fs.readFileSync(wordsPath, 'utf-8'));
@@ -25,19 +27,30 @@ try {
   targetWordsList = JSON.parse(fs.readFileSync(targetWordsPath, 'utf-8'));
 } catch (e) {
   console.warn('target_words.json not found, using allWordsList');
-  targetWordsList = allWordsList;
+}
+
+try {
+  const tdkObj = JSON.parse(fs.readFileSync(tdkWordsPath, 'utf-8'));
+  allTdkWordsList = Object.keys(tdkObj);
+} catch (e) {
+  console.warn('tdk_words_5.json not found');
 }
 
 if (!targetWordsList.length) {
-  targetWordsList = allWordsList;
+  targetWordsList = allTdkWordsList.length ? allTdkWordsList : allWordsList;
 }
 
-console.log(`[RoomManager] Loaded ${allWordsSet.size} valid guess words and ${targetWordsList.length} target words.`);
+if (!allTdkWordsList.length) {
+  allTdkWordsList = targetWordsList;
+}
+
+console.log(`[RoomManager] Loaded ${allWordsSet.size} valid guess words, ${targetWordsList.length} standard TDK target words, and ${allTdkWordsList.length} total TDK words.`);
 
 export function getWordStats() {
   return {
     validCount: allWordsSet.size,
-    targetCount: targetWordsList.length
+    targetCount: targetWordsList.length,
+    tdkTotal: allTdkWordsList.length
   };
 }
 
@@ -47,7 +60,8 @@ export function isValidWord(word) {
 }
 
 export function pickRandomWords(count, pool = 'common') {
-  const source = (pool === 'all' || targetWordsList.length === 0) ? allWordsList : targetWordsList;
+  // Always select strictly from official TDK dictionary
+  const source = (pool === 'all' && allTdkWordsList.length > 0) ? allTdkWordsList : targetWordsList;
   const picked = [];
   const used = new Set();
 
