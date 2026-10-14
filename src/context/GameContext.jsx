@@ -13,6 +13,8 @@ export function GameProvider({ children }) {
   const [opponentProgress, setOpponentProgress] = useState({});
   const [roundSummaryData, setRoundSummaryData] = useState(null);
   const [gameOverData, setGameOverData] = useState(null);
+  const [snakeState, setSnakeState] = useState(null);
+  const [snakeGameOverData, setSnakeGameOverData] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
   // Show auto-dismissing toast
@@ -95,6 +97,8 @@ export function GameProvider({ children }) {
       console.log('[Socket] lobby_returned:', updatedRoom);
       setGameOverData(null);
       setRoundSummaryData(null);
+      setSnakeState(null);
+      setSnakeGameOverData(null);
       setOpponentProgress({});
       setRoom(updatedRoom);
       showToast('Oda lobiye döndü 🏠');
@@ -107,12 +111,38 @@ export function GameProvider({ children }) {
       }
     }
 
+    function handleSnakeState(state) {
+      setSnakeState(state);
+    }
+
+    function handleSnakeEvents(events) {
+      if (!Array.isArray(events)) return;
+      events.forEach(evt => {
+        if (evt.type === 'food_eaten') {
+          sound.playEat();
+        } else if (evt.reason) {
+          sound.playSnakeDeath();
+        }
+      });
+    }
+
+    function handleSnakeGameOver(data) {
+      console.log('[Socket] snake_game_over:', data);
+      setSnakeGameOverData(data);
+      if (data.room) setRoom(data.room);
+      sound.playGameWin();
+      showToast('Yılan Arenası Sona Erdi! 🏆', 4000);
+    }
+
     socket.on('room_updated', handleRoomUpdated);
     socket.on('game_started', handleGameStarted);
     socket.on('opponent_updated', handleOpponentUpdated);
     socket.on('round_summary', handleRoundSummary);
     socket.on('next_round_started', handleNextRoundStarted);
     socket.on('game_over', handleGameOver);
+    socket.on('snake_state', handleSnakeState);
+    socket.on('snake_events', handleSnakeEvents);
+    socket.on('snake_game_over', handleSnakeGameOver);
     socket.on('lobby_returned', handleLobbyReturned);
     socket.on('chat_received', handleChatReceived);
 
@@ -123,6 +153,9 @@ export function GameProvider({ children }) {
       socket.off('round_summary', handleRoundSummary);
       socket.off('next_round_started', handleNextRoundStarted);
       socket.off('game_over', handleGameOver);
+      socket.off('snake_state', handleSnakeState);
+      socket.off('snake_events', handleSnakeEvents);
+      socket.off('snake_game_over', handleSnakeGameOver);
       socket.off('lobby_returned', handleLobbyReturned);
       socket.off('chat_received', handleChatReceived);
     };
@@ -218,6 +251,47 @@ export function GameProvider({ children }) {
     });
   }, [showToast]);
 
+  const selectGame = useCallback((gameId) => {
+    return new Promise((resolve) => {
+      socket.emit('select_game', { gameId }, (res) => {
+        if (res && res.room) setRoom(res.room);
+        resolve(res);
+      });
+    });
+  }, []);
+
+  const selectSnakeClass = useCallback((snakeClass) => {
+    return new Promise((resolve) => {
+      socket.emit('select_snake_class', { snakeClass }, (res) => {
+        if (res && res.player) setPlayer(res.player);
+        resolve(res);
+      });
+    });
+  }, []);
+
+  const startSnake = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      socket.emit('start_snake', (res) => {
+        if (res.success) {
+          resolve();
+        } else {
+          showToast(res.error || 'Yılan oyunu başlatılamadı!');
+          reject(new Error(res.error));
+        }
+      });
+    });
+  }, [showToast]);
+
+  const sendSnakeInput = useCallback((dir) => {
+    socket.emit('snake_input', { dir });
+  }, []);
+
+  const snakeRematch = useCallback(() => {
+    socket.emit('snake_rematch', (res) => {
+      if (!res.success) showToast(res.error);
+    });
+  }, [showToast]);
+
   return (
     <GameContext.Provider
       value={{
@@ -232,6 +306,8 @@ export function GameProvider({ children }) {
         opponentProgress,
         roundSummaryData,
         gameOverData,
+        snakeState,
+        snakeGameOverData,
         toastMessage,
         showToast,
         createRoom,
@@ -243,7 +319,12 @@ export function GameProvider({ children }) {
         submitGuess,
         sendChat,
         rematch,
-        returnToLobby
+        returnToLobby,
+        selectGame,
+        selectSnakeClass,
+        startSnake,
+        sendSnakeInput,
+        snakeRematch
       }}
     >
       {children}

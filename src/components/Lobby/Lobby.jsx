@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useGame } from '../../context/GameContext';
 import WordleConfigModal from './WordleConfigModal';
+import SnakeClassModal, { SNAKE_CLASSES } from '../Snake/SnakeClassModal';
 import LiveChat from '../Common/LiveChat';
-import { Copy, Check, Share2, Play, Users, Crown, Settings2, CheckCircle2, Plus } from 'lucide-react';
+import { Copy, Check, Share2, Play, Users, Crown, Settings2, CheckCircle2, Sparkles, Zap, Flame, Snowflake, Shield } from 'lucide-react';
 
 export default function Lobby() {
-  const { room, player, showToast, updateProfile, startWordle } = useGame();
+  const { room, player, showToast, updateProfile, startWordle, startSnake, selectGame } = useGame();
   const [copied, setCopied] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [snakeClassModalOpen, setSnakeClassModalOpen] = useState(false);
 
   if (!room) return null;
 
@@ -89,12 +91,20 @@ export default function Lobby() {
             <h2 className="font-heading font-black text-lg text-slate-900">
               Oyunlar
             </h2>
-            <span className="text-xs text-slate-400">1 Oyun Aktif</span>
+            <span className="text-xs text-slate-400">
+              Seçili Oyun: <strong className="text-slate-700 uppercase">{room.selectedGame === 'snake' ? 'Yılan Arenası' : 'Wordle'}</strong>
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Card 1: Wordle (Clean & Focused) */}
-            <div className="bg-white rounded-2xl p-5 border-2 border-emerald-500/80 shadow-md shadow-emerald-500/5 flex flex-col justify-between">
+            {/* Card 1: Wordle */}
+            <div
+              className={`bg-white rounded-2xl p-5 border-2 transition-all flex flex-col justify-between ${
+                room.selectedGame === 'wordle'
+                  ? 'border-emerald-500/90 shadow-md shadow-emerald-500/10'
+                  : 'border-slate-200 hover:border-slate-300 opacity-90'
+              }`}
+            >
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex gap-1 items-center font-heading font-black text-xs text-white">
@@ -103,25 +113,31 @@ export default function Lobby() {
                     <span className="w-7 h-7 rounded-md bg-slate-700 flex items-center justify-center">R</span>
                     <span className="w-7 h-7 rounded-md bg-emerald-500 flex items-center justify-center">D</span>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                    Aktif
-                  </span>
+                  {room.selectedGame === 'wordle' ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      Aktif Oyun
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                      Sözlük Oyunu
+                    </span>
+                  )}
                 </div>
 
                 <h3 className="font-heading font-black text-base text-slate-900 mb-0.5">
                   Türkçe Wordle
                 </h3>
                 <p className="text-xs text-slate-500 mb-3">
-                  5 Harf • 6 Deneme • 1-12 Kişi
+                  5 Harf • 6 Deneme • TDK Resmi Sözlük
                 </p>
 
                 {/* Settings Pill */}
                 <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 font-semibold mb-4 flex items-center justify-between">
                   <span>{wordleConfig.wordCount} Kelime</span>
                   <span className="text-slate-300">•</span>
-                  <span>{wordleConfig.mode === 'speed' ? '⚡ Hız Modu' : '🎯 Puan Modu'}</span>
+                  <span>{wordleConfig.mode === 'speed' ? '⚡ Hız' : '🎯 Puan'}</span>
                   <span className="text-slate-300">•</span>
-                  <span className="text-slate-500">{wordleConfig.wordPool === 'common' ? 'Yaygın' : 'Zor'}</span>
+                  <span className="text-slate-500">{wordleConfig.wordPool === 'common' ? 'Standart' : 'Geniş'}</span>
                 </div>
               </div>
 
@@ -132,17 +148,26 @@ export default function Lobby() {
                     <button
                       onClick={() => setConfigModalOpen(true)}
                       className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                      title="Ayarları Düzenle"
+                      title="Wordle Ayarlarını Düzenle"
                     >
                       <Settings2 className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={handleStart}
-                      className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-heading font-bold text-xs tracking-wide shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      Oyunu Başlat
-                    </button>
+                    {room.selectedGame === 'wordle' ? (
+                      <button
+                        onClick={handleStart}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-heading font-bold text-xs tracking-wide shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Wordle Başlat
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => selectGame('wordle')}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-heading font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        Wordle'ı Seç
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <button
@@ -150,19 +175,97 @@ export default function Lobby() {
                     className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Settings2 className="w-3.5 h-3.5" />
-                    Kuralları Gör (Host Başlatacak)
+                    Kuralları Gör
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Card 2: Minimal Placeholder slot */}
-            <div className="bg-slate-50/60 rounded-2xl p-5 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center min-h-[180px]">
-              <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mb-2">
-                <Plus className="w-4 h-4" />
+            {/* Card 2: Snake Arena */}
+            <div
+              className={`bg-white rounded-2xl p-5 border-2 transition-all flex flex-col justify-between ${
+                room.selectedGame === 'snake'
+                  ? 'border-amber-500/90 shadow-md shadow-amber-500/10'
+                  : 'border-slate-200 hover:border-slate-300 opacity-90'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-red-500 text-white flex items-center justify-center text-xl shadow-xs">
+                    🐍
+                  </div>
+                  {room.selectedGame === 'snake' ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                      Aktif Oyun
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      YENİ!
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="font-heading font-black text-base text-slate-900 mb-0.5">
+                  Yılan Arenası
+                </h3>
+                <p className="text-xs text-slate-500 mb-3">
+                  4 Karakter • Ateş & Buz • 3 Can
+                </p>
+
+                {/* Character Picker Pill */}
+                <button
+                  type="button"
+                  onClick={() => setSnakeClassModalOpen(true)}
+                  className="w-full p-2.5 rounded-xl bg-amber-50/80 hover:bg-amber-100/80 border border-amber-200/80 text-xs text-amber-900 font-bold mb-4 flex items-center justify-between transition cursor-pointer"
+                  title="Yılan Karakterini Değiştir"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>{SNAKE_CLASSES[player?.snakeClass || 'speed']?.icon}</span>
+                    <span>{SNAKE_CLASSES[player?.snakeClass || 'speed']?.title}</span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-amber-700 underline">
+                    Değiştir ➔
+                  </span>
+                </button>
               </div>
-              <span className="font-heading font-bold text-xs text-slate-600">Yeni Oyun</span>
-              <span className="text-[11px] text-slate-400 mt-0.5">Yakında Eklenecek</span>
+
+              {/* Action Buttons */}
+              <div>
+                {isHost ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSnakeClassModalOpen(true)}
+                      className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="Karakterini Seç"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                    </button>
+                    {room.selectedGame === 'snake' ? (
+                      <button
+                        onClick={startSnake}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-heading font-bold text-xs tracking-wide shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Arenayı Başlat
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => selectGame('snake')}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-700 font-heading font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        Arenayı Seç
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSnakeClassModalOpen(true)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Karakterini Seç ({SNAKE_CLASSES[player?.snakeClass || 'speed']?.name})</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -208,6 +311,14 @@ export default function Lobby() {
                         Sen
                       </span>
                     )}
+                    {room.selectedGame === 'snake' && (
+                      <span
+                        className="text-xs px-1.5 py-0.2 rounded-md bg-slate-100 border border-slate-200 text-slate-700 font-semibold"
+                        title={SNAKE_CLASSES[p.snakeClass || 'speed']?.title}
+                      >
+                        {SNAKE_CLASSES[p.snakeClass || 'speed']?.icon}
+                      </span>
+                    )}
                   </div>
 
                   <div>
@@ -239,6 +350,12 @@ export default function Lobby() {
       <WordleConfigModal
         isOpen={configModalOpen}
         onClose={() => setConfigModalOpen(false)}
+      />
+
+      {/* Snake Class Selector Modal */}
+      <SnakeClassModal
+        isOpen={snakeClassModalOpen}
+        onClose={() => setSnakeClassModalOpen(false)}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Home from './components/Home/Home';
 import Lobby from './components/Lobby/Lobby';
 import WordleGame from './components/Wordle/WordleGame';
+import SnakeGame from './components/Snake/SnakeGame';
 
 function GameHubApp() {
   const { room, toastMessage } = useGame();
@@ -36,6 +37,8 @@ function GameHubApp() {
           <Home />
         ) : room.gameState === 'lobby' ? (
           <Lobby />
+        ) : room.selectedGame === 'snake' ? (
+          <SnakeGame />
         ) : (
           <WordleGame />
         )}

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { evaluateWordleGuess, isWordleCorrect, toTurkishLower } from './wordleLogic.js';
+import { SnakeSession, SNAKE_CLASSES } from './snakeLogic.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,7 +113,8 @@ export function createRoom(socketId, playerName, avatar) {
     isHost: true,
     ready: true,
     score: 0,
-    connected: true
+    connected: true,
+    snakeClass: 'speed'
   };
 
   const room = {
@@ -129,7 +131,11 @@ export function createRoom(socketId, playerName, avatar) {
       scoringType: 'speed', // 'speed' | 'guesses'
       wordPool: 'common' // 'common' | 'all'
     },
-    wordleSession: null
+    wordleSession: null,
+    snakeConfig: {
+      hazardFrequency: 'normal'
+    },
+    snakeSession: null
   };
 
   rooms.set(roomCode, room);
@@ -164,7 +170,8 @@ export function joinRoom(socketId, roomCode, playerName, avatar) {
       isHost: false,
       ready: false,
       score: 0,
-      connected: true
+      connected: true,
+      snakeClass: 'speed'
     };
     room.players.push(existing);
   } else {
@@ -225,6 +232,9 @@ export function updatePlayer(socketId, updates) {
   if (updates.name) player.name = updates.name.slice(0, 16);
   if (updates.avatar) player.avatar = updates.avatar;
   if (typeof updates.ready === 'boolean') player.ready = updates.ready;
+  if (updates.snakeClass && SNAKE_CLASSES[updates.snakeClass]) {
+    player.snakeClass = updates.snakeClass;
+  }
 
   return { room, player };
 }
@@ -554,9 +564,53 @@ export function returnToLobby(socketId) {
 
   room.gameState = 'lobby';
   room.wordleSession = null;
+  room.snakeSession = null;
   room.players.forEach(p => {
     p.score = 0;
   });
 
   return { room };
+}
+
+export function selectGame(socketId, gameId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.hostId !== socketId) return null;
+  if (room.gameState !== 'lobby') return null;
+  if (!['wordle', 'snake'].includes(gameId)) return null;
+
+  room.selectedGame = gameId;
+  return room;
+}
+
+export function selectSnakeClass(socketId, snakeClass) {
+  const room = getRoomBySocket(socketId);
+  if (!room) return null;
+  const player = room.players.find(p => p.id === socketId);
+  if (!player) return null;
+  if (!SNAKE_CLASSES[snakeClass]) return null;
+
+  player.snakeClass = snakeClass;
+  return { room, player };
+}
+
+export function startSnakeGame(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu başlatabilir.' };
+
+  room.selectedGame = 'snake';
+  room.gameState = 'playing';
+  room.snakeSession = new SnakeSession(room.code, room.players, room.snakeConfig || {});
+  return { room, snakeSession: room.snakeSession };
+}
+
+export function handleSnakeInput(socketId, dir) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'playing' || !room.snakeSession) return;
+  room.snakeSession.setPlayerDirection(socketId, dir);
+}
+
+export function restartSnakeGame(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
+  return startSnakeGame(socketId);
 }

@@ -18,8 +18,14 @@ import {
   restartGame,
   returnToLobby,
   getWordStats,
-  calculateLeaderboard
+  calculateLeaderboard,
+  selectGame,
+  selectSnakeClass,
+  startSnakeGame,
+  handleSnakeInput,
+  restartSnakeGame
 } from './roomManager.js';
+import { SNAKE_CLASSES } from './snakeLogic.js';
 import {
   getWordDetails,
   getWordsDetailsMap,
@@ -87,6 +93,56 @@ async function emitGameOver(room, leaderboard, mode) {
     wordDetails,
     mode
   });
+}
+
+app.get('/api/snake/classes', (req, res) => {
+  res.json({ success: true, classes: SNAKE_CLASSES });
+});
+
+// Snake Active Game Loops
+const snakeGameLoops = new Map();
+
+function stopSnakeLoop(roomCode) {
+  if (snakeGameLoops.has(roomCode)) {
+    clearInterval(snakeGameLoops.get(roomCode));
+    snakeGameLoops.delete(roomCode);
+    console.log(`[Snake Loop Stopped] Room ${roomCode}`);
+  }
+}
+
+function startSnakeLoop(room) {
+  stopSnakeLoop(room.code);
+  console.log(`[Snake Loop Started] Room ${room.code} with ${room.players.length} players`);
+
+  const loopId = setInterval(() => {
+    if (!room.snakeSession || room.gameState !== 'playing') {
+      stopSnakeLoop(room.code);
+      return;
+    }
+
+    const tickResult = room.snakeSession.tick(Date.now());
+
+    // Broadcast current arena state
+    io.to(room.code).emit('snake_state', tickResult.state);
+
+    // Broadcast in-game events (kills, food eaten, etc.)
+    if (tickResult.events && tickResult.events.length > 0) {
+      io.to(room.code).emit('snake_events', tickResult.events);
+    }
+
+    // Check if match ended
+    if (tickResult.gameOver) {
+      stopSnakeLoop(room.code);
+      room.gameState = 'game_over';
+      console.log(`[Snake Match Ended] Room ${room.code}`);
+      io.to(room.code).emit('snake_game_over', {
+        room,
+        leaderboard: tickResult.leaderboard
+      });
+    }
+  }, 45); // ~22 ticks per second
+
+  snakeGameLoops.set(room.code, loopId);
 }
 
 io.on('connection', (socket) => {
@@ -281,7 +337,7 @@ io.on('connection', (socket) => {
     io.to(room.code).emit('chat_received', chatItem);
   });
 
-  // Rematch
+  // Rematch (Wordle)
   socket.on('rematch', (callback) => {
     const result = restartGame(socket.id);
     if (result.error) {
@@ -292,14 +348,72 @@ io.on('connection', (socket) => {
     if (typeof callback === 'function') callback({ success: true });
   });
 
+  // Select Game (Wordle / Snake)
+  socket.on('select_game', ({ gameId }, callback) => {
+    const room = selectGame(socket.id, gameId);
+    if (!room) {
+      if (typeof callback === 'function') callback({ success: false });
+      return;
+    }
+    console.log(`[Game Selected] Room ${room.code} switched to ${gameId}`);
+    io.to(room.code).emit('room_updated', room);
+    if (typeof callback === 'function') callback({ success: true, room });
+  });
+
+  // Select Snake Class
+  socket.on('select_snake_class', ({ snakeClass }, callback) => {
+    const res = selectSnakeClass(socket.id, snakeClass);
+    if (!res) {
+      if (typeof callback === 'function') callback({ success: false });
+      return;
+    }
+    io.to(res.room.code).emit('room_updated', res.room);
+    if (typeof callback === 'function') callback({ success: true, player: res.player });
+  });
+
+  // Start Snake Game
+  socket.on('start_snake', (callback) => {
+    const result = startSnakeGame(socket.id);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    const room = result.room;
+    console.log(`[Snake Started] Room ${room.code}`);
+    io.to(room.code).emit('game_started', room);
+    startSnakeLoop(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
+  // Snake Direction Input
+  socket.on('snake_input', ({ dir }) => {
+    handleSnakeInput(socket.id, dir);
+  });
+
+  // Snake Rematch
+  socket.on('snake_rematch', (callback) => {
+    const result = restartSnakeGame(socket.id);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    const room = result.room;
+    console.log(`[Snake Rematch Started] Room ${room.code}`);
+    io.to(room.code).emit('game_started', room);
+    startSnakeLoop(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
   // Return to Lobby
   socket.on('return_to_lobby', (callback) => {
+    const room = getRoomBySocket(socket.id);
+    if (room) stopSnakeLoop(room.code);
     const result = returnToLobby(socket.id);
     if (result.error) {
       if (typeof callback === 'function') callback({ success: false, error: result.error });
       return;
     }
-    io.to(result.room.code).emit('room_updated', result.room);
+    io.to(result.room.code).emit('lobby_returned', result.room);
     if (typeof callback === 'function') callback({ success: true });
   });
 
@@ -320,6 +434,9 @@ io.on('connection', (socket) => {
     const result = leaveRoom(socket.id);
     if (result && result.room) {
       socket.leave(result.room.code);
+      if (result.room.players.length === 0) {
+        stopSnakeLoop(result.room.code);
+      }
       checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
     }
@@ -330,6 +447,9 @@ io.on('connection', (socket) => {
     console.log(`[Socket] Disconnected: ${socket.id}`);
     const result = leaveRoom(socket.id);
     if (result && result.room) {
+      if (result.room.players.length === 0) {
+        stopSnakeLoop(result.room.code);
+      }
       checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
     }
