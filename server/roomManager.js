@@ -398,28 +398,15 @@ export function handleWordleGuess(socketId, guessWord) {
     const allFinished = activeProgresses.length > 0 && activeProgresses.every(p => p.isGameFinished);
 
     let gameOver = false;
+    let leaderboard = [];
     if (allFinished) {
       gameOver = true;
       room.gameState = 'game_over';
+      leaderboard = calculateLeaderboard(room);
 
-      // Ranking rule:
-      // 1. Most solved words count (b.solvedWordsCount - a.solvedWordsCount)
-      // 2. If equal, fastest completion time ((a.finishTime || Infinity) - (b.finishTime || Infinity))
-      // 3. If equal, highest score (b.totalScore - a.totalScore)
-      const sorted = [...activeProgresses].sort((a, b) => {
-        if (b.solvedWordsCount !== a.solvedWordsCount) {
-          return b.solvedWordsCount - a.solvedWordsCount;
-        }
-        const timeA = a.finishTime !== null ? a.finishTime : Infinity;
-        const timeB = b.finishTime !== null ? b.finishTime : Infinity;
-        if (timeA !== timeB) {
-          return timeA - timeB;
-        }
-        return (b.totalScore || 0) - (a.totalScore || 0);
-      });
-
-      sorted.forEach((p, idx) => {
-        p.finishRank = idx + 1;
+      leaderboard.forEach((item) => {
+        const p = session.playerProgress[item.playerId];
+        if (p) p.finishRank = item.rank;
       });
     }
 
@@ -434,6 +421,7 @@ export function handleWordleGuess(socketId, guessWord) {
       targetWord: isFailed ? targetWord : (isCorrect ? targetWord : null),
       opponentProgressData,
       gameOver,
+      leaderboard,
       room
     };
   }
@@ -460,6 +448,50 @@ export function handleWordleGuess(socketId, guessWord) {
   }
 
   return { success: true, result, isCorrect, opponentProgressData, room };
+}
+
+/**
+ * Calculate sorted leaderboard for room
+ */
+export function calculateLeaderboard(room) {
+  if (!room || !room.wordleSession) return [];
+
+  const session = room.wordleSession;
+  const isSpeed = session.mode === 'speed';
+  const connectedPlayerIds = new Set(room.players.map(p => p.id));
+  const activeProgresses = Object.values(session.playerProgress).filter(p => connectedPlayerIds.has(p.playerId));
+
+  const sorted = [...activeProgresses].sort((a, b) => {
+    if (isSpeed) {
+      if (b.solvedWordsCount !== a.solvedWordsCount) {
+        return b.solvedWordsCount - a.solvedWordsCount;
+      }
+      const timeA = a.finishTime !== null ? a.finishTime : Infinity;
+      const timeB = b.finishTime !== null ? b.finishTime : Infinity;
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+      return (b.totalScore || 0) - (a.totalScore || 0);
+    } else {
+      if ((b.totalScore || 0) !== (a.totalScore || 0)) {
+        return (b.totalScore || 0) - (a.totalScore || 0);
+      }
+      return b.solvedWordsCount - a.solvedWordsCount;
+    }
+  });
+
+  return sorted.map((p, idx) => ({
+    rank: idx + 1,
+    playerId: p.playerId,
+    name: p.name,
+    avatar: p.avatar,
+    solvedWordsCount: p.solvedWordsCount,
+    wordCount: session.wordCount,
+    finishTime: p.finishTime,
+    totalScore: p.totalScore || 0,
+    roundPoints: p.roundPoints || [],
+    isWinner: idx === 0
+  }));
 }
 
 /**
@@ -490,7 +522,8 @@ export function advanceScoreModeRound(roomCode) {
   } else {
     // Game over!
     room.gameState = 'game_over';
-    return { gameOver: true, room };
+    const leaderboard = calculateLeaderboard(room);
+    return { gameOver: true, room, leaderboard };
   }
 }
 

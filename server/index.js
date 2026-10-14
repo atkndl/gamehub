@@ -17,7 +17,8 @@ import {
   advanceScoreModeRound,
   restartGame,
   returnToLobby,
-  getWordStats
+  getWordStats,
+  calculateLeaderboard
 } from './roomManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -153,10 +154,13 @@ io.on('connection', (socket) => {
       // Handle Speed Mode Game Over
       if (room.wordleSession.mode === 'speed' && result.gameOver) {
         console.log(`[Speed Mode Game Over] Room ${room.code}`);
+        const leaderboard = result.leaderboard || calculateLeaderboard(room);
         io.to(room.code).emit('game_over', {
           room,
+          leaderboard,
           playerProgress: room.wordleSession.playerProgress,
-          words: room.wordleSession.words
+          words: room.wordleSession.words,
+          mode: 'speed'
         });
       }
 
@@ -205,10 +209,13 @@ io.on('connection', (socket) => {
           if (!advanceResult) return;
 
           if (advanceResult.gameOver) {
+            const leaderboard = advanceResult.leaderboard || calculateLeaderboard(advanceResult.room);
             io.to(room.code).emit('game_over', {
               room: advanceResult.room,
+              leaderboard,
               playerProgress: advanceResult.room.wordleSession.playerProgress,
-              words: advanceResult.room.wordleSession.words
+              words: advanceResult.room.wordleSession.words,
+              mode: 'score'
             });
           } else if (advanceResult.nextRound) {
             io.to(room.code).emit('next_round_started', {
@@ -270,11 +277,31 @@ io.on('connection', (socket) => {
     if (typeof callback === 'function') callback({ success: true });
   });
 
+  const checkGameCompletion = (room) => {
+    if (room && room.gameState === 'playing' && room.wordleSession?.mode === 'speed') {
+      const connectedIds = new Set(room.players.map(p => p.id));
+      const activeProgresses = Object.values(room.wordleSession.playerProgress).filter(p => connectedIds.has(p.playerId));
+      const allFinished = activeProgresses.length > 0 && activeProgresses.every(p => p.isGameFinished);
+      if (allFinished) {
+        room.gameState = 'game_over';
+        const leaderboard = calculateLeaderboard(room);
+        io.to(room.code).emit('game_over', {
+          room,
+          leaderboard,
+          playerProgress: room.wordleSession.playerProgress,
+          words: room.wordleSession.words,
+          mode: 'speed'
+        });
+      }
+    }
+  };
+
   // Leave Room
   socket.on('leave_room', () => {
     const result = leaveRoom(socket.id);
     if (result && result.room) {
       socket.leave(result.room.code);
+      checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
     }
   });
@@ -284,6 +311,7 @@ io.on('connection', (socket) => {
     console.log(`[Socket] Disconnected: ${socket.id}`);
     const result = leaveRoom(socket.id);
     if (result && result.room) {
+      checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
     }
   });

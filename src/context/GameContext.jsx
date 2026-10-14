@@ -88,6 +88,16 @@ export function GameProvider({ children }) {
       setGameOverData(data);
       if (data.room) setRoom(data.room);
       sound.playGameWin();
+      showToast('Oyun Bitti! Sıralama ve Sonuçlar Açıklandı 🏆', 4000);
+    }
+
+    function handleLobbyReturned(updatedRoom) {
+      console.log('[Socket] lobby_returned:', updatedRoom);
+      setGameOverData(null);
+      setRoundSummaryData(null);
+      setOpponentProgress({});
+      setRoom(updatedRoom);
+      showToast('Oda lobiye döndü 🏠');
     }
 
     function handleChatReceived(chatItem) {
@@ -103,6 +113,7 @@ export function GameProvider({ children }) {
     socket.on('round_summary', handleRoundSummary);
     socket.on('next_round_started', handleNextRoundStarted);
     socket.on('game_over', handleGameOver);
+    socket.on('lobby_returned', handleLobbyReturned);
     socket.on('chat_received', handleChatReceived);
 
     return () => {
@@ -112,6 +123,7 @@ export function GameProvider({ children }) {
       socket.off('round_summary', handleRoundSummary);
       socket.off('next_round_started', handleNextRoundStarted);
       socket.off('game_over', handleGameOver);
+      socket.off('lobby_returned', handleLobbyReturned);
       socket.off('chat_received', handleChatReceived);
     };
   }, [showToast]);
