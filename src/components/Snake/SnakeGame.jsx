@@ -137,13 +137,13 @@ export default function SnakeGame() {
           </button>
         </div>
 
-        {/* Desktop Controls Helper Hint */}
-        <div className="hidden sm:flex items-center justify-center gap-4 mt-3 text-xs text-slate-400 font-medium">
-          <span>Yön Tuşları veya <span className="font-mono font-bold text-slate-300">W, A, S, D</span> ile yönlendir</span>
+        {/* Desktop Controls & Rules Helper Hint */}
+        <div className="hidden sm:flex items-center justify-center gap-3 mt-3 text-xs text-slate-400 font-medium">
+          <span>Yön Tuşları veya <span className="font-mono font-bold text-slate-300">W, A, S, D</span></span>
+          <span>•</span>
+          <span className="text-indigo-400 font-semibold">🌀 Sınırlar Açık: Duvarlardan geçerek karşıdan çıkabilirsin</span>
           <span>•</span>
           <span>Ödülleri toplayarak büyü</span>
-          <span>•</span>
-          <span>Rakiplerini tuzağa düşür</span>
         </div>
       </div>
 

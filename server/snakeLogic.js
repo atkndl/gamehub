@@ -317,8 +317,8 @@ export class SnakeSession {
     const body = [];
     for (let i = 0; i < classInfo.initialLength; i++) {
       body.push({
-        x: Math.max(1, Math.min(GRID_SIZE - 2, spawn.x - dir.x * i)),
-        y: Math.max(1, Math.min(GRID_SIZE - 2, spawn.y - dir.y * i))
+        x: (((spawn.x - dir.x * i) % GRID_SIZE) + GRID_SIZE) % GRID_SIZE,
+        y: (((spawn.y - dir.y * i) % GRID_SIZE) + GRID_SIZE) % GRID_SIZE
       });
     }
 
@@ -356,9 +356,12 @@ export class SnakeSession {
         player.dir = { ...player.nextDir };
 
         const head = player.body[0];
+        // Sınırın bir tarafından girip öbür tarafından çıkma (Wraparound / Portal Grid)
+        const rawX = head.x + player.dir.x;
+        const rawY = head.y + player.dir.y;
         const newHead = {
-          x: head.x + player.dir.x,
-          y: head.y + player.dir.y
+          x: ((rawX % GRID_SIZE) + GRID_SIZE) % GRID_SIZE,
+          y: ((rawY % GRID_SIZE) + GRID_SIZE) % GRID_SIZE
         };
 
         player.pendingHead = newHead;
@@ -373,11 +376,7 @@ export class SnakeSession {
       const head = player.pendingHead;
       const isInvulnerable = now < player.invulnerableUntil;
 
-      // A. Wall Collision
-      if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
-        toKill.push({ player, killer: null, reason: 'wall' });
-        continue;
-      }
+      // A. Duvar Çarpışması kaldırıldı: Sınırlar açık, yılanlar karşı taraftan çıkar.
 
       // B. Hazard Zone Collision (if not invulnerable)
       if (!isInvulnerable) {

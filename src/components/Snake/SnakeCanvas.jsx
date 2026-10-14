@@ -261,21 +261,26 @@ export default function SnakeCanvas({ state, myPlayerId }) {
           ctx.arc(rightEyeX + dirX * 1.5, rightEyeY + dirY * 1.5, headRadius * 0.14, 0, Math.PI * 2);
           ctx.fill();
 
-          // Name Tag & Avatar above Head
+          // Name Tag & Avatar above Head (flips below if near top boundary)
           ctx.font = 'bold 10px sans-serif';
           ctx.textAlign = 'center';
           const label = `${p.avatar} ${p.name}${isSelf ? ' (Sen)' : ''}`;
           ctx.fillStyle = isSelf ? '#facc15' : '#ffffff';
-          ctx.fillText(label, headX, headY - headRadius - 6);
+          const labelY = headY < 24 ? headY + headRadius + 14 : headY - headRadius - 6;
+          ctx.fillText(label, headX, labelY);
 
           ctx.restore();
         });
       }
 
-      // 6. Arena Perimeter Glow Border
-      ctx.strokeStyle = '#334155';
-      ctx.lineWidth = 3;
+      // 6. Arena Perimeter Portal Border (Wraparound Grid indicator)
+      ctx.save();
+      const portalGlow = (Math.sin(now / 300) + 1) / 2;
+      ctx.strokeStyle = `rgba(99, 102, 241, ${0.45 + portalGlow * 0.35})`; // Shimmering portal neon
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([12, 8]);
       ctx.strokeRect(1, 1, width - 2, height - 2);
+      ctx.restore();
     };
 
     render();
