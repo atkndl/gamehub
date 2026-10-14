@@ -197,6 +197,21 @@ export default function SurvivalHUD({
           </div>
         </div>
 
+        {/* Bottom Center: Keyboard Controls Ribbon (Desktop) */}
+        <div className="hidden lg:flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-slate-900/80 border border-slate-700/80 backdrop-blur-md text-[11px] font-bold text-slate-300 shadow-xl pointer-events-auto">
+          <span><span className="font-mono text-amber-400 font-black">W, A, S, D</span> Hareket</span>
+          <span className="text-slate-600">•</span>
+          <span><span className="font-mono text-sky-400 font-black">Mouse</span> Nişan & Ateş</span>
+          <span className="text-slate-600">•</span>
+          <span><span className="font-mono text-emerald-400 font-black">1, 2, 3</span> Silah</span>
+          <span className="text-slate-600">•</span>
+          <span><span className="font-mono text-purple-400 font-black">R</span> Şarjör</span>
+          <span className="text-slate-600">•</span>
+          <span><span className="font-mono text-yellow-400 font-black">F / E</span> Al</span>
+          <span className="text-slate-600">•</span>
+          <span><span className="font-mono text-red-400 font-black">7, 8, 9</span> İyileş</span>
+        </div>
+
         {/* Bottom Right: Weapons & Ammo Arsenal */}
         <div className="flex flex-col items-end gap-2 pointer-events-auto">
           {/* Pickup Hint button */}
@@ -239,7 +254,7 @@ export default function SurvivalHUD({
             <button
               type="button"
               onClick={() => onSwitchSlot('secondary')}
-              className={`p-2.5 sm:p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[90px] sm:min-w-[110px] ${
+              className={`p-2.5 sm:p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[90px] sm:min-w-[120px] ${
                 myPlayer.activeSlot === 'secondary'
                   ? 'bg-blue-600/30 border-blue-500 shadow-lg shadow-blue-500/20'
                   : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600'
@@ -250,7 +265,9 @@ export default function SurvivalHUD({
                 <span>{myPlayer.weapons?.secondary?.icon || '—'}</span>
               </div>
               <div className="font-heading font-black text-xs sm:text-sm text-white truncate">
-                {myPlayer.weapons?.secondary?.name || 'Boş'}
+                {myPlayer.weapons?.secondary?.name || (
+                  <span className="text-slate-400 font-normal text-[11px]">Boş (Loot bul)</span>
+                )}
               </div>
               {myPlayer.weapons?.secondary && !myPlayer.weapons.secondary.isMelee && (
                 <div className="text-[11px] font-mono font-bold text-blue-400 mt-0.5">

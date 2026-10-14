@@ -4,7 +4,6 @@ import { SCOPES, WEAPONS } from '../../../server/survivalLogic';
 export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onStopShoot }) {
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
-  const floatingTextsRef = useRef([]);
 
   // Handle Mouse Aiming & Shooting
   useEffect(() => {
@@ -70,15 +69,15 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
 
       // Find my player
       const myPlayer = state?.players?.find(p => p.id === myPlayerId);
-      const camX = myPlayer ? myPlayer.x : 1200;
-      const camY = myPlayer ? myPlayer.y : 1200;
+      const camX = myPlayer ? myPlayer.x : 2100;
+      const camY = myPlayer ? myPlayer.y : 2100;
 
       // Determine camera zoom based on equipped scope
       const scopeKey = myPlayer?.scope || '1x';
       const zoom = SCOPES[scopeKey]?.zoom || 1.0;
 
       // 1. Clear background
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = '#0a0f1d';
       ctx.fillRect(0, 0, width, height);
 
       // Save base transform
@@ -89,16 +88,16 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       ctx.scale(zoom, zoom);
       ctx.translate(-camX, -camY);
 
-      const mapSize = state?.mapSize || 2400;
+      const mapSize = state?.mapSize || 4200;
 
-      // 2. Render Ground Terrain (Textured grass grid)
-      ctx.fillStyle = '#142318'; // Dark tactical grass
+      // 2. Render Ground Terrain (Tactical dark grass with subtle grid)
+      ctx.fillStyle = '#162217';
       ctx.fillRect(0, 0, mapSize, mapSize);
 
-      // Grid lines
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      // Subtle tactical terrain grid
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
       ctx.lineWidth = 1;
-      const gridSize = 80;
+      const gridSize = 100;
       for (let x = 0; x <= mapSize; x += gridSize) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
@@ -112,56 +111,85 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         ctx.stroke();
       }
 
-      // Outer map void
+      // Outer map void boundary
       ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 6;
       ctx.strokeRect(0, 0, mapSize, mapSize);
 
-      // 3. Render Ground Loot
-      if (Array.isArray(state?.loot)) {
-        state.loot.forEach(item => {
+      // 3. Render Water Ponds
+      if (Array.isArray(state?.ponds)) {
+        state.ponds.forEach(pond => {
           ctx.save();
-          const bob = Math.sin(Date.now() / 250) * 2;
-
-          // Glowing loot shadow
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = item.type === 'weapon' ? '#fbbf24' : (item.type === 'scope' ? '#818cf8' : '#10b981');
-
-          // Loot pedestal base
+          // Sandy shoreline
           ctx.beginPath();
-          ctx.arc(item.x, item.y, 16, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+          ctx.arc(pond.x, pond.y, pond.radius + 12, 0, Math.PI * 2);
+          ctx.fillStyle = '#2d3748';
           ctx.fill();
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.lineWidth = 1.5;
+
+          // Water body
+          ctx.beginPath();
+          ctx.arc(pond.x, pond.y, pond.radius, 0, Math.PI * 2);
+          ctx.fillStyle = '#0284c7';
+          ctx.fill();
+
+          // Water ripple effect
+          const rippleRadius = pond.radius * (0.4 + 0.3 * Math.sin(Date.now() / 600));
+          ctx.beginPath();
+          ctx.arc(pond.x, pond.y, rippleRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+          ctx.lineWidth = 2;
           ctx.stroke();
-
-          // Loot Icon / Label
-          ctx.font = '16px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.shadowBlur = 0;
-          ctx.fillText(item.icon || '📦', item.x, item.y + bob);
-
-          // Name pill
-          ctx.font = 'bold 9px sans-serif';
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(item.name || '', item.x, item.y + 24);
 
           ctx.restore();
         });
       }
 
-      // 4. Render Obstacles (Buildings & Breakable Crates)
+      // 4. Render Ground Loot
+      if (Array.isArray(state?.loot)) {
+        state.loot.forEach(item => {
+          ctx.save();
+          const bob = Math.sin(Date.now() / 250) * 2.5;
+
+          // Glowing loot shadow
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = item.type === 'weapon' ? '#fbbf24' : (item.type === 'scope' ? '#818cf8' : '#10b981');
+
+          // Loot pedestal base
+          ctx.beginPath();
+          ctx.arc(item.x, item.y, 18, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Loot Icon / Label
+          ctx.font = '18px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowBlur = 0;
+          ctx.fillText(item.icon || '📦', item.x, item.y + bob);
+
+          // Name tag
+          ctx.font = 'bold 9px sans-serif';
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(item.name || '', item.x, item.y + 26);
+
+          ctx.restore();
+        });
+      }
+
+      // 5. Render Rectangular Obstacles (Crates, Shipping Containers, Buildings)
       if (Array.isArray(state?.obstacles)) {
         state.obstacles.forEach(ob => {
           ctx.save();
+
           if (ob.type === 'crate') {
             // Wooden Breakable Crate
-            ctx.fillStyle = '#78350f'; // Dark wood
+            ctx.fillStyle = '#854d0e';
             ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
 
-            // Crate slats
+            // Crate slats & diagonals
             ctx.strokeStyle = '#451a03';
             ctx.lineWidth = 3;
             ctx.strokeRect(ob.x + 2, ob.y + 2, ob.w - 4, ob.h - 4);
@@ -172,26 +200,83 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
             ctx.lineTo(ob.x, ob.y + ob.h);
             ctx.stroke();
 
-            // Crate icon / HP bar if damaged
+            // Crate HP bar if damaged
             if (ob.hp < ob.maxHp) {
               const hpPct = ob.hp / ob.maxHp;
-              ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-              ctx.fillRect(ob.x + 4, ob.y - 8, ob.w - 8, 4);
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+              ctx.fillRect(ob.x + 4, ob.y - 10, ob.w - 8, 4);
               ctx.fillStyle = '#ef4444';
-              ctx.fillRect(ob.x + 4, ob.y - 8, (ob.w - 8) * hpPct, 4);
+              ctx.fillRect(ob.x + 4, ob.y - 10, (ob.w - 8) * hpPct, 4);
             }
+          } else if (ob.type === 'container') {
+            // Shipping Container (Corrugated metal box)
+            const color = ob.color || '#dc2626';
+            ctx.fillStyle = color;
+            ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+
+            // Outer dark rim
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(ob.x, ob.y, ob.w, ob.h);
+
+            // Corrugated metal ridges
+            ctx.lineWidth = 2;
+            const isHorizontal = ob.w > ob.h;
+            if (isHorizontal) {
+              for (let rx = ob.x + 10; rx < ob.x + ob.w - 6; rx += 14) {
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+                ctx.beginPath();
+                ctx.moveTo(rx, ob.y + 2);
+                ctx.lineTo(rx, ob.y + ob.h - 2);
+                ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.beginPath();
+                ctx.moveTo(rx + 2, ob.y + 2);
+                ctx.lineTo(rx + 2, ob.y + ob.h - 2);
+                ctx.stroke();
+              }
+            } else {
+              for (let ry = ob.y + 10; ry < ob.y + ob.h - 6; ry += 14) {
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+                ctx.beginPath();
+                ctx.moveTo(ob.x + 2, ry);
+                ctx.lineTo(ob.x + ob.w - 2, ry);
+                ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.beginPath();
+                ctx.moveTo(ob.x + 2, ry + 2);
+                ctx.lineTo(ob.x + ob.w - 2, ry + 2);
+                ctx.stroke();
+              }
+            }
+
+            // Corner steel castings
+            ctx.fillStyle = '#1e293b';
+            const cs = 7;
+            ctx.fillRect(ob.x, ob.y, cs, cs);
+            ctx.fillRect(ob.x + ob.w - cs, ob.y, cs, cs);
+            ctx.fillRect(ob.x, ob.y + ob.h - cs, cs, cs);
+            ctx.fillRect(ob.x + ob.w - cs, ob.y + ob.h - cs, cs, cs);
+
+            // Container stencil text
+            ctx.font = 'bold 9px monospace';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.textAlign = 'center';
+            ctx.fillText(ob.label || 'CARGO', ob.x + ob.w / 2, ob.y + ob.h / 2 + 3);
           } else {
-            // Concrete / Stone Wall or Compound
-            ctx.fillStyle = '#334155';
+            // Concrete / Brick House Walls
+            ctx.fillStyle = '#475569';
             ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
 
             // Shaded border
             ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 4;
+            ctx.lineWidth = 3.5;
             ctx.strokeRect(ob.x, ob.y, ob.w, ob.h);
 
-            // Inner roof diagonal stripes
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            // Diagonal roof stripes
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
             ctx.lineWidth = 2;
             for (let s = -ob.h; s < ob.w; s += 24) {
               ctx.beginPath();
@@ -200,16 +285,101 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
               ctx.stroke();
             }
           }
+
           ctx.restore();
         });
       }
 
-      // 5. Render Flying Glowing Bullets
+      // 6. Render Circular Obstacles (Trees, Rocks, Red Explosive Barrels)
+      if (Array.isArray(state?.circularObstacles)) {
+        state.circularObstacles.forEach(cob => {
+          ctx.save();
+
+          if (cob.type === 'barrel') {
+            // Red Explosive Barrel
+            ctx.beginPath();
+            ctx.arc(cob.x, cob.y, cob.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#dc2626'; // Vibrant Red
+            ctx.fill();
+            ctx.strokeStyle = '#7f1d1d';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Inner hazard ring
+            ctx.beginPath();
+            ctx.arc(cob.x, cob.y, cob.radius * 0.65, 0, Math.PI * 2);
+            ctx.strokeStyle = '#fef08a';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Flame / Hazard icon
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🔥', cob.x, cob.y);
+
+            // Barrel HP bar if damaged
+            if (cob.hp < cob.maxHp) {
+              const hpPct = cob.hp / cob.maxHp;
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+              ctx.fillRect(cob.x - cob.radius, cob.y - cob.radius - 8, cob.radius * 2, 4);
+              ctx.fillStyle = '#ef4444';
+              ctx.fillRect(cob.x - cob.radius, cob.y - cob.radius - 8, cob.radius * 2 * hpPct, 4);
+            }
+          } else if (cob.type === 'rock') {
+            // Natural Granite Boulder
+            ctx.beginPath();
+            ctx.arc(cob.x, cob.y, cob.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#64748b'; // Slate granite
+            ctx.fill();
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Chiseled rock facets & highlights
+            ctx.beginPath();
+            ctx.arc(cob.x - cob.radius * 0.25, cob.y - cob.radius * 0.25, cob.radius * 0.45, 0, Math.PI * 2);
+            ctx.fillStyle = '#94a3b8';
+            ctx.fill();
+
+            // Moss patch
+            ctx.beginPath();
+            ctx.arc(cob.x + cob.radius * 0.35, cob.y + cob.radius * 0.25, cob.radius * 0.3, 0, Math.PI * 2);
+            ctx.fillStyle = '#15803d';
+            ctx.fill();
+          } else if (cob.type === 'tree') {
+            // Solid Tree Trunk & Root Base
+            ctx.beginPath();
+            ctx.arc(cob.x, cob.y, cob.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#3f1d0b'; // Dark bark
+            ctx.fill();
+            ctx.strokeStyle = '#1c0d02';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Tree Canopy Foliage Overhead
+            ctx.beginPath();
+            ctx.arc(cob.x, cob.y, cob.radius * 1.55, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(21, 128, 61, 0.88)'; // Lush green
+            ctx.fill();
+
+            // Canopy inner highlight
+            ctx.beginPath();
+            ctx.arc(cob.x - cob.radius * 0.3, cob.y - cob.radius * 0.3, cob.radius * 0.7, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.4)';
+            ctx.fill();
+          }
+
+          ctx.restore();
+        });
+      }
+
+      // 7. Render Flying Glowing Bullets
       if (Array.isArray(state?.bullets)) {
         state.bullets.forEach(b => {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2);
+          ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
           ctx.fillStyle = b.color || '#fef08a';
           ctx.shadowColor = b.color || '#facc15';
           ctx.shadowBlur = 8;
@@ -218,15 +388,15 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
           // Tracer line
           ctx.beginPath();
           ctx.moveTo(b.x, b.y);
-          ctx.lineTo(b.x - b.vx * 1.8, b.y - b.vy * 1.8);
+          ctx.lineTo(b.x - b.vx * 2, b.y - b.vy * 2);
           ctx.strokeStyle = b.color || '#fef08a';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2.5;
           ctx.stroke();
           ctx.restore();
         });
       }
 
-      // 6. Render Players
+      // 8. Render Players
       if (Array.isArray(state?.players)) {
         state.players.forEach(p => {
           if (!p.isAlive) return;
@@ -299,7 +469,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
             // Muzzle flash when firing
             if (p.isShooting && !active.isReloading && active.ammo > 0) {
               ctx.beginPath();
-              ctx.arc(10 + gunLen + 4, 0, 7, 0, Math.PI * 2);
+              ctx.arc(10 + gunLen + 4, 0, 7.5, 0, Math.PI * 2);
               ctx.fillStyle = '#fef08a';
               ctx.shadowColor = '#f59e0b';
               ctx.shadowBlur = 12;
@@ -382,12 +552,12 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         });
       }
 
-      // 7. Render Bushes (Top layer so players can hide inside!)
+      // 9. Render Camouflage Bushes (Top layer so players can hide inside!)
       if (Array.isArray(state?.bushes)) {
         state.bushes.forEach(bush => {
           ctx.save();
-          // Bush outer cluster circles
-          ctx.fillStyle = 'rgba(21, 128, 61, 0.82)'; // Dense forest green
+          // Bush outer cluster
+          ctx.fillStyle = 'rgba(21, 128, 61, 0.82)';
           ctx.beginPath();
           ctx.arc(bush.x, bush.y, bush.radius, 0, Math.PI * 2);
           ctx.fill();
@@ -406,7 +576,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         });
       }
 
-      // 8. Render Safe Zone / Toxic Red Gas Circle (Alan Modu)
+      // 10. Render Safe Zone / Toxic Red Gas Circle (Alan Modu)
       if (state?.mode === 'battle_royale' && state?.zone) {
         const z = state.zone;
         ctx.save();
@@ -420,7 +590,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
 
         // Invert path to shade everything OUTSIDE the safe circle in toxic red gas
         ctx.beginPath();
-        ctx.rect(-1000, -1000, mapSize + 2000, mapSize + 2000);
+        ctx.rect(-2000, -2000, mapSize + 4000, mapSize + 4000);
         ctx.arc(z.x, z.y, z.currentRadius, 0, Math.PI * 2, true);
         ctx.fillStyle = 'rgba(239, 68, 68, 0.28)'; // Toxic red gas
         ctx.fill();
@@ -439,8 +609,8 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       // Restore camera transform
       ctx.restore();
 
-      // 9. Floating Minimap (HUD overlay on top right)
-      const miniSize = 130;
+      // 11. Floating Tactical Minimap (HUD overlay on top right)
+      const miniSize = 140;
       const miniPad = 16;
       const miniX = width - miniSize - miniPad;
       const miniY = miniPad;
@@ -448,11 +618,31 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
 
       ctx.save();
       // Minimap background
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
       ctx.fillRect(miniX, miniY, miniSize, miniSize);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
       ctx.lineWidth = 2;
       ctx.strokeRect(miniX, miniY, miniSize, miniSize);
+
+      // Minimap Ponds
+      if (Array.isArray(state?.ponds)) {
+        state.ponds.forEach(pond => {
+          ctx.beginPath();
+          ctx.arc(miniX + pond.x * miniScale, miniY + pond.y * miniScale, Math.max(2, pond.radius * miniScale), 0, Math.PI * 2);
+          ctx.fillStyle = '#0284c7';
+          ctx.fill();
+        });
+      }
+
+      // Minimap Buildings / Compounds
+      if (Array.isArray(state?.obstacles)) {
+        state.obstacles.forEach(ob => {
+          if (ob.type === 'wall' || ob.type === 'container') {
+            ctx.fillStyle = ob.type === 'container' ? '#f59e0b' : '#64748b';
+            ctx.fillRect(miniX + ob.x * miniScale, miniY + ob.y * miniScale, Math.max(1, ob.w * miniScale), Math.max(1, ob.h * miniScale));
+          }
+        });
+      }
 
       // Minimap Safe Zone
       if (state?.mode === 'battle_royale' && state?.zone) {
@@ -470,7 +660,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
           if (!p.isAlive) return;
           const isSelf = p.id === myPlayerId;
           ctx.beginPath();
-          ctx.arc(miniX + p.x * miniScale, miniY + p.y * miniScale, isSelf ? 4.5 : 3, 0, Math.PI * 2);
+          ctx.arc(miniX + p.x * miniScale, miniY + p.y * miniScale, isSelf ? 4.5 : 2.5, 0, Math.PI * 2);
           ctx.fillStyle = isSelf ? '#38bdf8' : '#ef4444';
           ctx.fill();
         });
