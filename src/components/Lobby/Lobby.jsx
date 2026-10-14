@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { useGame } from '../../context/GameContext';
 import WordleConfigModal from './WordleConfigModal';
 import SnakeClassModal, { SNAKE_CLASSES } from '../Snake/SnakeClassModal';
+import SurvivalConfigModal from '../Survival/SurvivalConfigModal';
 import LiveChat from '../Common/LiveChat';
 import { Copy, Check, Share2, Play, Users, Crown, Settings2, CheckCircle2, Sparkles, Zap, Flame, Snowflake, Shield } from 'lucide-react';
 
 export default function Lobby() {
-  const { room, player, showToast, updateProfile, startWordle, startSnake, selectGame } = useGame();
+  const { room, player, showToast, updateProfile, startWordle, startSnake, startSurvival, selectGame } = useGame();
   const [copied, setCopied] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [snakeClassModalOpen, setSnakeClassModalOpen] = useState(false);
+  const [survivalModalOpen, setSurvivalModalOpen] = useState(false);
 
   if (!room) return null;
 
@@ -19,6 +21,10 @@ export default function Lobby() {
     mode: 'speed',
     scoringType: 'speed',
     wordPool: 'common'
+  };
+  const survivalConfig = room.survivalConfig || {
+    mode: 'battle_royale',
+    matchDuration: 180
   };
 
   const handleCopyCode = () => {
@@ -92,7 +98,7 @@ export default function Lobby() {
               Oyunlar
             </h2>
             <span className="text-xs text-slate-400">
-              Seçili Oyun: <strong className="text-slate-700 uppercase">{room.selectedGame === 'snake' ? 'Yılan Arenası' : 'Wordle'}</strong>
+              Seçili Oyun: <strong className="text-slate-700 uppercase">{room.selectedGame === 'survival' ? 'Survival' : room.selectedGame === 'snake' ? 'Yılan Arenası' : 'Wordle'}</strong>
             </span>
           </div>
 
@@ -267,6 +273,87 @@ export default function Lobby() {
                 )}
               </div>
             </div>
+
+            {/* Card 3: Survival */}
+            <div
+              className={`bg-white rounded-2xl p-5 border-2 transition-all flex flex-col justify-between ${
+                room.selectedGame === 'survival'
+                  ? 'border-blue-500/90 shadow-md shadow-blue-500/10'
+                  : 'border-slate-200 hover:border-slate-300 opacity-90'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-xl shadow-xs">
+                    🎖️
+                  </div>
+                  {room.selectedGame === 'survival' ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                      Aktif Oyun
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                      YENİ!
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="font-heading font-black text-base text-slate-900 mb-0.5">
+                  Survival (2D Savaş)
+                </h3>
+                <p className="text-xs text-slate-500 mb-3">
+                  Alan & Maç Modu • Dürbün • Siper & Loot
+                </p>
+
+                {/* Settings Pill */}
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 font-semibold mb-4 flex items-center justify-between">
+                  <span>{survivalConfig.mode === 'battle_royale' ? '🔥 Alan Modu' : '⚔️ Maç Modu'}</span>
+                  <span className="text-slate-300">•</span>
+                  <span>{survivalConfig.mode === 'deathmatch' ? `${Math.round(survivalConfig.matchDuration / 60)} Dk` : 'Kızıl Gaz'}</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-slate-500">2x-8x Dürbün</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div>
+                {isHost ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSurvivalModalOpen(true)}
+                      className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                      title="Survival Ayarlarını Düzenle"
+                    >
+                      <Settings2 className="w-4 h-4" />
+                    </button>
+                    {room.selectedGame === 'survival' ? (
+                      <button
+                        onClick={startSurvival}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-heading font-bold text-xs tracking-wide shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Survival Başlat
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => selectGame('survival')}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-heading font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        Survival'ı Seç
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSurvivalModalOpen(true)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                    Kuralları Gör
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -356,6 +443,12 @@ export default function Lobby() {
       <SnakeClassModal
         isOpen={snakeClassModalOpen}
         onClose={() => setSnakeClassModalOpen(false)}
+      />
+
+      {/* Survival Config Modal */}
+      <SurvivalConfigModal
+        isOpen={survivalModalOpen}
+        onClose={() => setSurvivalModalOpen(false)}
       />
     </div>
   );

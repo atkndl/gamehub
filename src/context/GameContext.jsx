@@ -15,6 +15,8 @@ export function GameProvider({ children }) {
   const [gameOverData, setGameOverData] = useState(null);
   const [snakeState, setSnakeState] = useState(null);
   const [snakeGameOverData, setSnakeGameOverData] = useState(null);
+  const [survivalState, setSurvivalState] = useState(null);
+  const [survivalGameOverData, setSurvivalGameOverData] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
   // Show auto-dismissing toast
@@ -99,6 +101,8 @@ export function GameProvider({ children }) {
       setRoundSummaryData(null);
       setSnakeState(null);
       setSnakeGameOverData(null);
+      setSurvivalState(null);
+      setSurvivalGameOverData(null);
       setOpponentProgress({});
       setRoom(updatedRoom);
       showToast('Oda lobiye döndü 🏠');
@@ -134,6 +138,33 @@ export function GameProvider({ children }) {
       showToast('Yılan Arenası Sona Erdi! 🏆', 4000);
     }
 
+    function handleSurvivalState(st) {
+      setSurvivalState(st);
+    }
+
+    function handleSurvivalEvents(events) {
+      if (!Array.isArray(events)) return;
+      events.forEach(evt => {
+        if (evt.type === 'gunshot') {
+          sound.playGunshot(evt.weaponId);
+        } else if (evt.type === 'punch') {
+          sound.playPunch();
+        } else if (evt.type === 'hit') {
+          sound.playHurt();
+        } else if (evt.type === 'kill') {
+          sound.playError();
+        }
+      });
+    }
+
+    function handleSurvivalGameOver(data) {
+      console.log('[Socket] survival_game_over:', data);
+      setSurvivalGameOverData(data);
+      if (data.room) setRoom(data.room);
+      sound.playGameWin();
+      showToast('Survival Sona Erdi! 🏆', 4000);
+    }
+
     socket.on('room_updated', handleRoomUpdated);
     socket.on('game_started', handleGameStarted);
     socket.on('opponent_updated', handleOpponentUpdated);
@@ -143,6 +174,9 @@ export function GameProvider({ children }) {
     socket.on('snake_state', handleSnakeState);
     socket.on('snake_events', handleSnakeEvents);
     socket.on('snake_game_over', handleSnakeGameOver);
+    socket.on('survival_state', handleSurvivalState);
+    socket.on('survival_events', handleSurvivalEvents);
+    socket.on('survival_game_over', handleSurvivalGameOver);
     socket.on('lobby_returned', handleLobbyReturned);
     socket.on('chat_received', handleChatReceived);
 
@@ -156,6 +190,9 @@ export function GameProvider({ children }) {
       socket.off('snake_state', handleSnakeState);
       socket.off('snake_events', handleSnakeEvents);
       socket.off('snake_game_over', handleSnakeGameOver);
+      socket.off('survival_state', handleSurvivalState);
+      socket.off('survival_events', handleSurvivalEvents);
+      socket.off('survival_game_over', handleSurvivalGameOver);
       socket.off('lobby_returned', handleLobbyReturned);
       socket.off('chat_received', handleChatReceived);
     };
@@ -292,6 +329,33 @@ export function GameProvider({ children }) {
     });
   }, [showToast]);
 
+  const updateSurvivalConfig = useCallback((config) => {
+    socket.emit('update_survival_config', config);
+  }, []);
+
+  const startSurvival = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      socket.emit('start_survival', (res) => {
+        if (res.success) {
+          resolve();
+        } else {
+          showToast(res.error || 'Survival oyunu başlatılamadı!');
+          reject(new Error(res.error));
+        }
+      });
+    });
+  }, [showToast]);
+
+  const sendSurvivalInput = useCallback((data) => {
+    socket.emit('survival_input', data);
+  }, []);
+
+  const survivalRematch = useCallback(() => {
+    socket.emit('survival_rematch', (res) => {
+      if (!res.success) showToast(res.error);
+    });
+  }, [showToast]);
+
   return (
     <GameContext.Provider
       value={{
@@ -308,6 +372,8 @@ export function GameProvider({ children }) {
         gameOverData,
         snakeState,
         snakeGameOverData,
+        survivalState,
+        survivalGameOverData,
         toastMessage,
         showToast,
         createRoom,
@@ -324,7 +390,11 @@ export function GameProvider({ children }) {
         selectSnakeClass,
         startSnake,
         sendSnakeInput,
-        snakeRematch
+        snakeRematch,
+        updateSurvivalConfig,
+        startSurvival,
+        sendSurvivalInput,
+        survivalRematch
       }}
     >
       {children}

@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { evaluateWordleGuess, isWordleCorrect, toTurkishLower } from './wordleLogic.js';
 import { SnakeSession, SNAKE_CLASSES } from './snakeLogic.js';
+import { SurvivalSession } from './survivalLogic.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -135,7 +136,12 @@ export function createRoom(socketId, playerName, avatar) {
     snakeConfig: {
       hazardFrequency: 'normal'
     },
-    snakeSession: null
+    snakeSession: null,
+    survivalConfig: {
+      mode: 'battle_royale', // 'battle_royale' (Alan Modu) | 'deathmatch' (Maç Modu)
+      matchDuration: 180 // 3 minutes
+    },
+    survivalSession: null
   };
 
   rooms.set(roomCode, room);
@@ -565,6 +571,7 @@ export function returnToLobby(socketId) {
   room.gameState = 'lobby';
   room.wordleSession = null;
   room.snakeSession = null;
+  room.survivalSession = null;
   room.players.forEach(p => {
     p.score = 0;
   });
@@ -576,7 +583,7 @@ export function selectGame(socketId, gameId) {
   const room = getRoomBySocket(socketId);
   if (!room || room.hostId !== socketId) return null;
   if (room.gameState !== 'lobby') return null;
-  if (!['wordle', 'snake'].includes(gameId)) return null;
+  if (!['wordle', 'snake', 'survival'].includes(gameId)) return null;
 
   room.selectedGame = gameId;
   return room;
@@ -614,3 +621,33 @@ export function restartSnakeGame(socketId) {
   if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
   return startSnakeGame(socketId);
 }
+
+export function updateSurvivalConfig(socketId, config) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.hostId !== socketId) return null;
+  room.survivalConfig = { ...room.survivalConfig, ...config };
+  return room;
+}
+
+export function startSurvivalGame(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu başlatabilir.' };
+
+  room.selectedGame = 'survival';
+  room.gameState = 'playing';
+  room.survivalSession = new SurvivalSession(room.code, room.players, room.survivalConfig || {});
+  return { room, survivalSession: room.survivalSession };
+}
+
+export function handleSurvivalInput(socketId, data) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'playing' || !room.survivalSession) return;
+  room.survivalSession.handlePlayerInput(socketId, data);
+}
+
+export function restartSurvivalGame(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
+  return startSurvivalGame(socketId);
+}
+

@@ -23,9 +23,14 @@ import {
   selectSnakeClass,
   startSnakeGame,
   handleSnakeInput,
-  restartSnakeGame
+  restartSnakeGame,
+  updateSurvivalConfig,
+  startSurvivalGame,
+  handleSurvivalInput,
+  restartSurvivalGame
 } from './roomManager.js';
 import { SNAKE_CLASSES } from './snakeLogic.js';
+import { WEAPONS, SCOPES, ARMORS, HELMETS } from './survivalLogic.js';
 import {
   getWordDetails,
   getWordsDetailsMap,
@@ -144,6 +149,57 @@ function startSnakeLoop(room) {
 
   snakeGameLoops.set(room.code, loopId);
 }
+
+// Survival Active Game Loops
+const survivalGameLoops = new Map();
+
+function stopSurvivalLoop(roomCode) {
+  if (survivalGameLoops.has(roomCode)) {
+    clearInterval(survivalGameLoops.get(roomCode));
+    survivalGameLoops.delete(roomCode);
+    console.log(`[Survival Loop Stopped] Room ${roomCode}`);
+  }
+}
+
+function startSurvivalLoop(room) {
+  stopSurvivalLoop(room.code);
+  console.log(`[Survival Loop Started] Room ${room.code} with ${room.players.length} players, Mode: ${room.survivalConfig?.mode}`);
+
+  const loopId = setInterval(() => {
+    if (!room.survivalSession || room.gameState !== 'playing') {
+      stopSurvivalLoop(room.code);
+      return;
+    }
+
+    const tickResult = room.survivalSession.tick(Date.now());
+
+    // Broadcast current survival world state
+    io.to(room.code).emit('survival_state', tickResult.state);
+
+    // Broadcast in-game events (gunshot, punch, hit, kill)
+    if (tickResult.events && tickResult.events.length > 0) {
+      io.to(room.code).emit('survival_events', tickResult.events);
+    }
+
+    // Check if match ended
+    if (tickResult.gameOver) {
+      stopSurvivalLoop(room.code);
+      room.gameState = 'game_over';
+      console.log(`[Survival Match Ended] Room ${room.code}`);
+      io.to(room.code).emit('survival_game_over', {
+        room,
+        leaderboard: tickResult.leaderboard,
+        mode: room.survivalSession.mode
+      });
+    }
+  }, 40); // 25 ticks per second (smooth, responsive, authoritative)
+
+  survivalGameLoops.set(room.code, loopId);
+}
+
+app.get('/api/survival/items', (req, res) => {
+  res.json({ success: true, weapons: WEAPONS, scopes: SCOPES, armors: ARMORS, helmets: HELMETS });
+});
 
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`);
@@ -404,10 +460,54 @@ io.on('connection', (socket) => {
     if (typeof callback === 'function') callback({ success: true });
   });
 
+  // Update Survival Config (Mode & Duration)
+  socket.on('update_survival_config', (config) => {
+    const room = updateSurvivalConfig(socket.id, config);
+    if (room) {
+      io.to(room.code).emit('room_updated', room);
+    }
+  });
+
+  // Start Survival Game
+  socket.on('start_survival', (callback) => {
+    const result = startSurvivalGame(socket.id);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    const room = result.room;
+    console.log(`[Survival Started] Room ${room.code}`);
+    io.to(room.code).emit('game_started', room);
+    startSurvivalLoop(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
+  // Survival Player Input (Movement, Aim Angle, Shooting, Reload, Heal)
+  socket.on('survival_input', (inputData) => {
+    handleSurvivalInput(socket.id, inputData);
+  });
+
+  // Survival Rematch
+  socket.on('survival_rematch', (callback) => {
+    const result = restartSurvivalGame(socket.id);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    const room = result.room;
+    console.log(`[Survival Rematch Started] Room ${room.code}`);
+    io.to(room.code).emit('game_started', room);
+    startSurvivalLoop(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
   // Return to Lobby
   socket.on('return_to_lobby', (callback) => {
     const room = getRoomBySocket(socket.id);
-    if (room) stopSnakeLoop(room.code);
+    if (room) {
+      stopSnakeLoop(room.code);
+      stopSurvivalLoop(room.code);
+    }
     const result = returnToLobby(socket.id);
     if (result.error) {
       if (typeof callback === 'function') callback({ success: false, error: result.error });
@@ -436,6 +536,7 @@ io.on('connection', (socket) => {
       socket.leave(result.room.code);
       if (result.room.players.length === 0) {
         stopSnakeLoop(result.room.code);
+        stopSurvivalLoop(result.room.code);
       }
       checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
@@ -449,6 +550,7 @@ io.on('connection', (socket) => {
     if (result && result.room) {
       if (result.room.players.length === 0) {
         stopSnakeLoop(result.room.code);
+        stopSurvivalLoop(result.room.code);
       }
       checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
