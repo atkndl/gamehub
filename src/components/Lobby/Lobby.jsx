@@ -7,7 +7,7 @@ import LiveChat from '../Common/LiveChat';
 import { Copy, Check, Share2, Play, Users, Crown, Settings2, CheckCircle2, Sparkles, Zap, Flame, Snowflake, Shield } from 'lucide-react';
 
 export default function Lobby() {
-  const { room, player, showToast, updateProfile, startWordle, startSnake, startSurvival, selectGame } = useGame();
+  const { room, player, showToast, updateProfile, updateWordleConfig, startWordle, startSnake, startSurvival, selectGame } = useGame();
   const [copied, setCopied] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [snakeClassModalOpen, setSnakeClassModalOpen] = useState(false);
@@ -20,7 +20,22 @@ export default function Lobby() {
     wordCount: 5,
     mode: 'speed',
     scoringType: 'speed',
-    wordPool: 'common'
+    wordPool: 'common',
+    isTroubleMode: false
+  };
+
+  const handleToggleTrouble = () => {
+    if (!isHost) return;
+    const nextVal = !wordleConfig.isTroubleMode;
+    updateWordleConfig({
+      isTroubleMode: nextVal,
+      wordCount: nextVal ? 5 : (wordleConfig.wordCount || 5)
+    });
+    if (nextVal) {
+      showToast('🔥 Trouble Modu Aktif! Rakipler birbirine 5 kelime seçecek 😈');
+    } else {
+      showToast('Klasik Wordle Aktif (Sistem rastgele kelimeler seçecek)');
+    }
   };
   const survivalConfig = room.survivalConfig || {
     mode: 'battle_royale',
@@ -137,25 +152,73 @@ export default function Lobby() {
                   5 Harf • 6 Deneme • TDK Resmi Sözlük
                 </p>
 
+                {/* Trouble Modu Quick Toggle Switch directly on the Lobby Card */}
+                <div
+                  onClick={isHost ? handleToggleTrouble : undefined}
+                  className={`p-3 rounded-2xl border transition-all flex items-center justify-between mb-3 ${
+                    wordleConfig.isTroubleMode
+                      ? 'bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-purple-400 text-purple-950 shadow-xs'
+                      : 'bg-slate-50 border-slate-200/90 text-slate-700 hover:border-slate-300'
+                  } ${isHost ? 'cursor-pointer' : 'cursor-default'}`}
+                  title={isHost ? 'Trouble Modunu Aç/Kapat' : 'Sadece oda sahibi değiştirebilir'}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xl">🔥</span>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-heading font-black text-xs text-slate-900">
+                          Trouble (Meydan Okuma) Modu
+                        </span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
+                          wordleConfig.isTroubleMode ? 'bg-purple-200 text-purple-800' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          Opsiyonel
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 block">
+                        {wordleConfig.isTroubleMode
+                          ? 'Aktif • Rakipler 20 kelimelik havuzdan seçecek 😈'
+                          : 'Kapalı • Klasik Wordle oynanır (Açmak için tıkla)'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isHost && (
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      <div
+                        className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
+                          wordleConfig.isTroubleMode ? 'bg-purple-600' : 'bg-slate-300'
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded-full bg-white shadow-xs transition-transform ${
+                            wordleConfig.isTroubleMode ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Settings Pill */}
                 <div className={`p-2.5 rounded-xl border text-xs font-semibold mb-4 flex items-center justify-between ${
                   wordleConfig.isTroubleMode
-                    ? 'bg-purple-50 border-purple-200 text-purple-900'
+                    ? 'bg-purple-50/60 border-purple-200/70 text-purple-900'
                     : 'bg-slate-50 border-slate-100 text-slate-700'
                 }`}>
                   {wordleConfig.isTroubleMode ? (
                     <>
                       <span className="font-bold flex items-center gap-1 text-purple-800">
-                        <span>🔥</span> Trouble Modu
+                        <span>😈</span> 5 Kelime (Seçmeli)
                       </span>
                       <span className="text-purple-300">•</span>
-                      <span>5 Kelime</span>
+                      <span>{wordleConfig.mode === 'speed' ? '⚡ Hız Modu' : '🎯 Puan Modu'}</span>
                       <span className="text-purple-300">•</span>
-                      <span>{wordleConfig.mode === 'speed' ? '⚡ Hız' : '🎯 Puan'}</span>
+                      <span className="text-purple-700 font-bold">20 Havuz Çipi</span>
                     </>
                   ) : (
                     <>
-                      <span>{wordleConfig.wordCount} Kelime</span>
+                      <span>{wordleConfig.wordCount || 5} Kelime</span>
                       <span className="text-slate-300">•</span>
                       <span>{wordleConfig.mode === 'speed' ? '⚡ Hız' : '🎯 Puan'}</span>
                       <span className="text-slate-300">•</span>
@@ -179,10 +242,23 @@ export default function Lobby() {
                     {room.selectedGame === 'wordle' ? (
                       <button
                         onClick={handleStart}
-                        className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-heading font-bold text-xs tracking-wide shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        className={`flex-1 py-2.5 px-4 rounded-xl font-heading font-bold text-xs tracking-wide shadow-xs active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer text-white ${
+                          wordleConfig.isTroubleMode
+                            ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 shadow-purple-500/25 animate-pulse'
+                            : 'bg-emerald-500 hover:bg-emerald-600'
+                        }`}
                       >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        Wordle Başlat
+                        {wordleConfig.isTroubleMode ? (
+                          <>
+                            <Flame className="w-3.5 h-3.5 fill-current text-rose-300" />
+                            Trouble ile Başlat (5 Kelime)
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            Wordle Başlat ({wordleConfig.wordCount || 5} Kelime)
+                          </>
+                        )}
                       </button>
                     ) : (
                       <button
