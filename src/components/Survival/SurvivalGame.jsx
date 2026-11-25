@@ -213,7 +213,7 @@ export default function SurvivalGame() {
   const myPlayer = survivalState?.players?.find(p => p.id === player?.id);
 
   return (
-    <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden select-none bg-slate-950">
+    <div className="fixed inset-0 w-screen h-screen overflow-hidden select-none bg-slate-950 z-10">
       {/* 2D Canvas Engine */}
       <SurvivalCanvas
         state={survivalState}

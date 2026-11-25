@@ -15,6 +15,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
   const interpPlayersRef = useRef({});
   const prevHpRef = useRef(null);
   const damageFlashRef = useRef(0);
+  const wetUntilRef = useRef(0);
   const sparksRef = useRef([]); // Metallic ricochet sparks
 
   // Handle Mouse Aiming & Shooting
@@ -83,6 +84,29 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       // Find my player in current server state
       const myPlayer = curState?.players?.find(p => p.id === curMyPlayerId);
 
+      // Real-time client-side water pond detection (instant response)
+      const curPx = localPredictedRef.current.initialized ? localPredictedRef.current.x : (myPlayer?.x || 2100);
+      const curPy = localPredictedRef.current.initialized ? localPredictedRef.current.y : (myPlayer?.y || 2100);
+
+      let localInWater = false;
+      if (Array.isArray(curState?.ponds)) {
+        for (const pond of curState.ponds) {
+          const dx = curPx - pond.x;
+          const dy = curPy - pond.y;
+          if (dx * dx + dy * dy < (pond.radius + 6) * (pond.radius + 6)) {
+            localInWater = true;
+            break;
+          }
+        }
+      }
+
+      const nowTime = Date.now();
+      if (localInWater) {
+        wetUntilRef.current = nowTime + 4000; // Lingering wetness for 4 seconds
+      }
+      const localIsWet = localInWater || (wetUntilRef.current && nowTime < wetUntilRef.current) || Boolean(myPlayer?.isWet);
+      const inWaterFinal = localInWater || Boolean(myPlayer?.inWater);
+
       // Local player prediction & reconciliation
       if (myPlayer) {
         if (!localPredictedRef.current.initialized) {
@@ -102,8 +126,9 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             my *= 0.7071;
           }
 
-          let spdMult = myPlayer.isWet ? (myPlayer.inWater ? 0.70 : 0.82) : 1.0;
-          if (myPlayer.boost > 0) spdMult += (myPlayer.boost / 100) * 0.3;
+          // Deep water: 45% slow (0.55); Lingering wet: 25% slow (0.75)
+          let spdMult = inWaterFinal ? 0.55 : (localIsWet ? 0.75 : 1.0);
+          if (myPlayer.boost > 0) spdMult += (myPlayer.boost / 100) * 0.25;
           const frameSpeed = 6.8 * spdMult;
 
           localPredictedRef.current.x += mx * frameSpeed;
@@ -181,8 +206,8 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           ctx.save();
           // Sandy shoreline
           ctx.beginPath();
-          ctx.arc(pond.x, pond.y, pond.radius + 12, 0, Math.PI * 2);
-          ctx.fillStyle = '#2d3748';
+          ctx.arc(pond.x, pond.y, pond.radius + 14, 0, Math.PI * 2);
+          ctx.fillStyle = '#b45309';
           ctx.fill();
 
           // Water body
@@ -191,11 +216,18 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           ctx.fillStyle = '#0284c7';
           ctx.fill();
 
-          // Water ripple effect
-          const rippleRadius = pond.radius * (0.4 + 0.3 * Math.sin(Date.now() / 600));
+          // Double water ripple waves
+          const rippleRadius1 = pond.radius * (0.35 + 0.3 * Math.sin(Date.now() / 600));
           ctx.beginPath();
-          ctx.arc(pond.x, pond.y, rippleRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+          ctx.arc(pond.x, pond.y, rippleRadius1, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+
+          const rippleRadius2 = pond.radius * (0.65 + 0.25 * Math.sin(Date.now() / 800 + 1));
+          ctx.beginPath();
+          ctx.arc(pond.x, pond.y, rippleRadius2, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(186, 230, 253, 0.25)';
           ctx.lineWidth = 2;
           ctx.stroke();
 
@@ -471,6 +503,15 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             ctx.globalAlpha = 0.55;
           }
 
+          // If in water, draw swimming/wading ripple ring around player
+          if ((isSelf && inWaterFinal) || p.inWater) {
+            ctx.beginPath();
+            ctx.arc(0, 0, p.radius + 6 + Math.sin(Date.now() / 200) * 3, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+          }
+
           // Hands & Weapon
           const active = p.weapons[p.activeSlot];
           const isMelee = !active || active.isMelee;
@@ -651,25 +692,34 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       ctx.restore();
 
       // --- FULL-SCREEN OVERLAYS (Wet Vignette, Damage Red Flash & Zone Danger Alert) ---
-      // 1. Wet Vignette & Water Droplets (when wading or soaked)
-      if (myPlayer?.isWet) {
-        const wetAlpha = myPlayer.inWater ? 0.38 : 0.22;
-        const wetGrad = ctx.createRadialGradient(width / 2, height / 2, width * 0.32, width / 2, height / 2, width * 0.72);
-        wetGrad.addColorStop(0, 'rgba(2, 132, 199, 0)');
-        wetGrad.addColorStop(0.8, `rgba(2, 132, 199, ${wetAlpha * 0.6})`);
-        wetGrad.addColorStop(1, `rgba(14, 165, 233, ${wetAlpha})`);
+      // 1. Wet Blue Screen Tint, Vignette & Water Droplets (when wading or soaked)
+      if (localIsWet) {
+        const wetAlpha = inWaterFinal ? 0.55 : 0.35;
+        const wetGrad = ctx.createRadialGradient(width / 2, height / 2, width * 0.20, width / 2, height / 2, width * 0.75);
+        wetGrad.addColorStop(0, 'rgba(14, 165, 233, 0.04)');
+        wetGrad.addColorStop(0.5, `rgba(2, 132, 199, ${wetAlpha * 0.55})`);
+        wetGrad.addColorStop(0.85, `rgba(2, 132, 199, ${wetAlpha * 0.85})`);
+        wetGrad.addColorStop(1, `rgba(3, 105, 161, ${wetAlpha})`);
         ctx.fillStyle = wetGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        // Blue screen water tint overlay across the entire screen
+        ctx.fillStyle = `rgba(14, 165, 233, ${inWaterFinal ? 0.14 : 0.07})`;
         ctx.fillRect(0, 0, width, height);
 
         // Water droplet highlights on screen corners
         ctx.save();
-        ctx.fillStyle = 'rgba(224, 242, 254, 0.28)';
-        const t = Date.now() / 350;
+        ctx.fillStyle = 'rgba(224, 242, 254, 0.45)';
+        const t = Date.now() / 300;
         const dropletPositions = [
-          { x: 35 + Math.sin(t) * 8, y: 45 + Math.cos(t) * 6, r: 7 },
-          { x: width - 40 + Math.sin(t + 1) * 8, y: 55 + Math.cos(t + 1) * 8, r: 9 },
-          { x: 50 + Math.sin(t + 2) * 10, y: height - 50 + Math.cos(t + 2) * 7, r: 8 },
-          { x: width - 45 + Math.sin(t + 3) * 8, y: height - 45 + Math.cos(t + 3) * 10, r: 9 }
+          { x: 35 + Math.sin(t) * 8, y: 45 + Math.cos(t) * 6, r: 8 },
+          { x: 60 + Math.sin(t + 0.5) * 6, y: 35 + Math.cos(t + 0.5) * 8, r: 5 },
+          { x: width - 40 + Math.sin(t + 1) * 8, y: 55 + Math.cos(t + 1) * 8, r: 10 },
+          { x: width - 70 + Math.sin(t + 1.5) * 7, y: 40 + Math.cos(t + 1.5) * 6, r: 6 },
+          { x: 50 + Math.sin(t + 2) * 10, y: height - 50 + Math.cos(t + 2) * 7, r: 9 },
+          { x: 80 + Math.sin(t + 2.5) * 6, y: height - 35 + Math.cos(t + 2.5) * 9, r: 5 },
+          { x: width - 45 + Math.sin(t + 3) * 8, y: height - 45 + Math.cos(t + 3) * 10, r: 11 },
+          { x: width - 75 + Math.sin(t + 3.5) * 7, y: height - 60 + Math.cos(t + 3.5) * 7, r: 6 }
         ];
         dropletPositions.forEach(d => {
           ctx.beginPath();

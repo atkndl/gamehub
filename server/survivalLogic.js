@@ -763,14 +763,14 @@ export class SurvivalSession {
       }
 
       if (inWater) {
-        p.wetUntil = now + 3500; // Lingering wetness for 3.5 seconds after exiting water
+        p.wetUntil = now + 4000; // Lingering wetness for 4 seconds after exiting water
       }
       const isWet = inWater || Boolean(p.wetUntil && now < p.wetUntil);
       p.inWater = inWater;
       p.isWet = isWet;
 
-      // Deep water: 30% slow; Lingering wetness: 18% slow
-      let speedMultiplier = inWater ? 0.70 : (isWet ? 0.82 : 1.0);
+      // Deep water: 45% slow (0.55); Lingering wetness: 25% slow (0.75)
+      let speedMultiplier = inWater ? 0.55 : (isWet ? 0.75 : 1.0);
       if (p.boost > 0) {
         speedMultiplier += (p.boost / 100) * 0.3; // up to +30% boost speed
         p.boost = Math.max(0, p.boost - 0.08);

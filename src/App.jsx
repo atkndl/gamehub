@@ -27,8 +27,10 @@ function GameHubApp() {
     }
   }, [room]);
 
+  const inActiveSurvival = room?.selectedGame === 'survival' && room?.gameState !== 'lobby';
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
+    <div className={`min-h-screen flex flex-col ${inActiveSurvival ? 'bg-slate-950 overflow-hidden' : 'bg-slate-50 text-slate-800'}`}>
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-slate-900/90 text-white text-xs sm:text-sm font-bold shadow-xl backdrop-blur-xs flex items-center gap-2 animate-bounce-subtle">
@@ -36,11 +38,11 @@ function GameHubApp() {
         </div>
       )}
 
-      {/* Top Navbar */}
-      <Navbar />
+      {/* Top Navbar - Hidden during active Survival match */}
+      {!inActiveSurvival && <Navbar />}
 
       {/* Main Content Router */}
-      <main className="flex-1 flex flex-col">
+      <main className={`flex-1 flex flex-col ${inActiveSurvival ? 'h-screen w-screen overflow-hidden' : ''}`}>
         {!room ? (
           <Home />
         ) : room.gameState === 'lobby' ? (
@@ -54,10 +56,12 @@ function GameHubApp() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="py-4 border-t border-slate-200/60 bg-white/50 text-center text-xs text-slate-400">
-        <p>GameHub • Çok Oyunculu Türkçe Wordle & Parti Oyunları</p>
-      </footer>
+      {/* Footer - Hidden during active Survival match */}
+      {!inActiveSurvival && (
+        <footer className="py-4 border-t border-slate-200/60 bg-white/50 text-center text-xs text-slate-400">
+          <p>GameHub • Çok Oyunculu Türkçe Wordle & Parti Oyunları</p>
+        </footer>
+      )}
     </div>
   );
 }
