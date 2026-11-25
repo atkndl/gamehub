@@ -218,6 +218,7 @@ export default function SurvivalGame() {
       <SurvivalCanvas
         state={survivalState}
         myPlayerId={player?.id}
+        keysDownRef={keysDownRef}
         onAim={handleAim}
         onShoot={handleShoot}
         onStopShoot={handleStopShoot}

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Heart, Shield, Zap, Crosshair, ArrowLeft, RotateCcw, Package } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Heart, Shield, Zap, Crosshair, ArrowLeft, RotateCcw, Package, AlertTriangle, Radio } from 'lucide-react';
 import { SCOPES } from '../../../server/survivalLogic';
 
 export default function SurvivalHUD({
@@ -12,6 +12,44 @@ export default function SurvivalHUD({
   onLeave,
   killfeed = []
 }) {
+  const [pickupAlert, setPickupAlert] = useState(null);
+  const prevInventoryRef = useRef(null);
+
+  // Monitor inventory changes to display transient pickup alerts
+  useEffect(() => {
+    if (!myPlayer) return;
+
+    if (prevInventoryRef.current) {
+      const prev = prevInventoryRef.current;
+      const curHeals = myPlayer.heals || {};
+      const prevHeals = prev.heals || {};
+
+      if ((curHeals.medkit || 0) > (prevHeals.medkit || 0)) {
+        setPickupAlert('+1 🧰 İlk Yardım Çantası Alındı [Tuş: 5]');
+      } else if ((curHeals.soda || 0) > (prevHeals.soda || 0)) {
+        setPickupAlert('+1 🥤 Enerji İçeceği Alındı [Tuş: 6]');
+      } else if ((curHeals.bandage || 0) > (prevHeals.bandage || 0)) {
+        setPickupAlert('+1 🩹 Sargı Bezi Alındı [Tuş: 4]');
+      } else if (myPlayer.weapons?.primary?.name !== prev.weapons?.primary?.name) {
+        setPickupAlert(`+1 ${myPlayer.weapons?.primary?.icon || '🔫'} ${myPlayer.weapons?.primary?.name} Kuşanıldı!`);
+      } else if (myPlayer.weapons?.secondary?.name !== prev.weapons?.secondary?.name && myPlayer.weapons?.secondary) {
+        setPickupAlert(`+1 ${myPlayer.weapons?.secondary?.icon || '🔫'} ${myPlayer.weapons?.secondary?.name} Kuşanıldı!`);
+      }
+    }
+
+    prevInventoryRef.current = {
+      heals: { ...myPlayer.heals },
+      weapons: { ...myPlayer.weapons }
+    };
+  }, [myPlayer]);
+
+  useEffect(() => {
+    if (pickupAlert) {
+      const timer = setTimeout(() => setPickupAlert(null), 2400);
+      return () => clearTimeout(timer);
+    }
+  }, [pickupAlert]);
+
   if (!myPlayer) return null;
 
   const activeWeapon = myPlayer.weapons[myPlayer.activeSlot];
@@ -23,7 +61,7 @@ export default function SurvivalHUD({
   const aliveCount = state?.players?.filter(p => p.isAlive)?.length || 0;
   const totalCount = state?.players?.length || 1;
 
-  // Format time remaining for deathmatch
+  // Format time (m:ss)
   const formatTime = (secs) => {
     if (secs == null) return '';
     const m = Math.floor(secs / 60);
@@ -31,23 +69,33 @@ export default function SurvivalHUD({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  // Safe zone status
+  const z = state?.zone;
+  const isOutsideZone = Boolean(
+    state?.mode === 'battle_royale' &&
+    z &&
+    Math.hypot(myPlayer.x - z.x, myPlayer.y - z.y) > z.currentRadius
+  );
+  const isZoneShrinking = Boolean(z?.isShrinking);
+  const zoneTimeUntilNext = z?.timeUntilNext || 0;
+
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 sm:p-5 select-none font-sans z-20">
       {/* TOP BAR */}
       <div className="flex items-start justify-between w-full">
         {/* Top Left: Exit & Match Info */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 pointer-events-auto">
           <button
             type="button"
             onClick={onLeave}
-            className="pointer-events-auto p-2.5 rounded-2xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-white backdrop-blur-md shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-2 text-xs font-bold"
+            className="p-2.5 rounded-2xl bg-slate-900/85 hover:bg-slate-800 border border-slate-700/80 text-white backdrop-blur-md shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-2 text-xs font-bold"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="hidden sm:inline">Lobiye Dön</span>
           </button>
 
           {/* Mode Badge */}
-          <div className="px-3.5 py-2 rounded-2xl bg-slate-900/80 border border-slate-700/80 backdrop-blur-md text-xs font-bold text-slate-200 flex items-center gap-2 shadow-lg">
+          <div className="px-3.5 py-2 rounded-2xl bg-slate-900/85 border border-slate-700/80 backdrop-blur-md text-xs font-bold text-slate-200 flex items-center gap-2 shadow-lg">
             {state?.mode === 'battle_royale' ? (
               <>
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -67,6 +115,29 @@ export default function SurvivalHUD({
             )}
           </div>
         </div>
+
+        {/* TOP CENTER: Safe Zone Countdown & Danger Alerts */}
+        {state?.mode === 'battle_royale' && z && (
+          <div className="flex flex-col items-center gap-1">
+            {isOutsideZone ? (
+              <div className="px-5 py-2 rounded-2xl bg-red-600/95 border-2 border-red-400 text-white font-black text-xs sm:text-sm tracking-wide shadow-2xl shadow-red-600/50 flex items-center gap-2 animate-bounce-subtle">
+                <AlertTriangle className="w-4 h-4 text-white animate-pulse" />
+                <span>🚨 GAZ ALANINDASINIZ! GÜVENLİ BÖLGEYE KOŞUN!</span>
+              </div>
+            ) : isZoneShrinking ? (
+              <div className="px-5 py-2 rounded-2xl bg-amber-500/95 border-2 border-amber-300 text-slate-950 font-black text-xs sm:text-sm tracking-wide shadow-2xl shadow-amber-500/40 flex items-center gap-2 animate-pulse">
+                <AlertTriangle className="w-4 h-4 text-slate-950 fill-current" />
+                <span>⚠️ TEHLİKE: ALAN DARALIYOR! ({zoneTimeUntilNext}s)</span>
+              </div>
+            ) : (
+              <div className="px-4 py-1.5 rounded-2xl bg-slate-900/85 border border-slate-700/80 backdrop-blur-md shadow-lg flex items-center gap-2 text-xs font-bold text-slate-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>ALAN DARALMASINA:</span>
+                <span className="font-mono text-emerald-400 font-black text-sm">{formatTime(zoneTimeUntilNext)}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Top Right: Killfeed Notifications */}
         <div className="flex flex-col items-end gap-1.5 max-w-xs overflow-hidden">
@@ -97,7 +168,7 @@ export default function SurvivalHUD({
 
       {/* HEALING PROGRESS CHANNEL NOTIFICATION */}
       {isAlive && myPlayer.healingItem && (
-        <div className="self-center px-6 py-3.5 rounded-2xl bg-emerald-950/90 border border-emerald-500/70 backdrop-blur-md text-center shadow-2xl animate-fade-in pointer-events-none">
+        <div className="self-center px-6 py-3.5 rounded-2xl bg-emerald-950/95 border-2 border-emerald-500/80 backdrop-blur-md text-center shadow-2xl animate-fade-in pointer-events-none">
           <div className="flex items-center justify-center gap-2 text-emerald-400 font-heading font-black text-sm mb-1.5">
             <span className="text-lg">
               {myPlayer.healingItem === 'bandage' ? '🩹' : myPlayer.healingItem === 'medkit' ? '🧰' : '🥤'}
@@ -110,9 +181,17 @@ export default function SurvivalHUD({
                 : 'Enerji İçeceği İçiliyor...'}
             </span>
           </div>
-          <div className="w-56 h-2 rounded-full bg-slate-900 border border-emerald-500/30 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 animate-pulse rounded-full w-full" />
+          <div className="w-56 h-2.5 rounded-full bg-slate-900 border border-emerald-500/40 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 animate-pulse rounded-full w-full" />
           </div>
+        </div>
+      )}
+
+      {/* RECENT LOOT PICKUP TOAST NOTIFICATION */}
+      {pickupAlert && (
+        <div className="self-center mb-2 px-4 py-2 rounded-xl bg-slate-900/90 border border-amber-400/80 text-amber-300 font-bold text-xs backdrop-blur-md shadow-xl animate-bounce-subtle pointer-events-none flex items-center gap-2">
+          <Package className="w-4 h-4 text-amber-400" />
+          <span>{pickupAlert}</span>
         </div>
       )}
 
@@ -137,7 +216,7 @@ export default function SurvivalHUD({
             )}
           </div>
 
-          <div className="w-64 sm:w-72 p-3 rounded-2xl bg-slate-900/90 border border-slate-700/80 backdrop-blur-md shadow-2xl flex flex-col gap-2">
+          <div className="w-64 sm:w-72 p-3.5 rounded-3xl bg-slate-900/90 border border-slate-700/80 backdrop-blur-md shadow-2xl flex flex-col gap-2.5">
             {/* Health Bar */}
             <div className="space-y-1">
               <div className="flex justify-between items-center text-[11px] font-bold">
@@ -145,7 +224,7 @@ export default function SurvivalHUD({
                   <Heart className="w-3.5 h-3.5 fill-red-400" />
                   SAĞLIK
                 </span>
-                <span className="text-white font-mono">{Math.round(myPlayer.hp)} / 100</span>
+                <span className="text-white font-mono font-black">{Math.round(myPlayer.hp)} / 100</span>
               </div>
               <div className="w-full h-3 rounded-full bg-slate-800 overflow-hidden border border-slate-700/80">
                 <div
@@ -165,7 +244,7 @@ export default function SurvivalHUD({
                     <Shield className="w-3 h-3" />
                     YELEK (Seviye {myPlayer.vestLevel})
                   </span>
-                  <span className="text-sky-300 font-mono">{Math.round(myPlayer.vest)} P</span>
+                  <span className="text-sky-300 font-mono font-bold">{Math.round(myPlayer.vest)} P</span>
                 </div>
                 <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
                   <div
@@ -183,7 +262,7 @@ export default function SurvivalHUD({
                   <Zap className="w-3 h-3 fill-amber-400" />
                   ADRENALİN (Hız & İyileşme)
                 </span>
-                <span className="text-amber-300 font-mono">{Math.round(myPlayer.boost)}%</span>
+                <span className="text-amber-300 font-mono font-bold">{Math.round(myPlayer.boost)}%</span>
               </div>
               <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
                 <div
@@ -192,59 +271,83 @@ export default function SurvivalHUD({
                 />
               </div>
             </div>
-
-            {/* Quick Heals Pill / Inventory */}
-            <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-1.5 text-[11px] font-bold">
-              <button
-                type="button"
-                onClick={() => onUseHeal('bandage')}
-                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-700 hover:border-emerald-500/50"
-                title="Sargı Bezi [Tuş: 4]"
-              >
-                <span>🩹</span>
-                <span>{myPlayer.heals?.bandage || 0}</span>
-                <span className="text-[9px] text-emerald-400 font-mono font-bold">[4]</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onUseHeal('medkit')}
-                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-700 hover:border-emerald-500/50"
-                title="İlk Yardım Çantası [Tuş: 5]"
-              >
-                <span>🧰</span>
-                <span>{myPlayer.heals?.medkit || 0}</span>
-                <span className="text-[9px] text-emerald-400 font-mono font-bold">[5]</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onUseHeal('soda')}
-                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-700 hover:border-emerald-500/50"
-                title="Enerji İçeceği [Tuş: 6]"
-              >
-                <span>🥤</span>
-                <span>{myPlayer.heals?.soda || 0}</span>
-                <span className="text-[9px] text-emerald-400 font-mono font-bold">[6]</span>
-              </button>
-            </div>
           </div>
         </div>
 
-        {/* Bottom Center: Keyboard Controls Ribbon (Desktop) */}
-        <div className="hidden lg:flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-slate-900/80 border border-slate-700/80 backdrop-blur-md text-[11px] font-bold text-slate-300 shadow-xl pointer-events-auto">
-          <span><span className="font-mono text-amber-400 font-black">W, A, S, D</span> Hareket</span>
-          <span className="text-slate-600">•</span>
-          <span><span className="font-mono text-sky-400 font-black">Mouse</span> Nişan & Ateş</span>
-          <span className="text-slate-600">•</span>
-          <span><span className="font-mono text-emerald-400 font-black">1, 2, 3</span> Silah</span>
-          <span className="text-slate-600">•</span>
-          <span><span className="font-mono text-purple-400 font-black">R</span> Şarjör</span>
-          <span className="text-slate-600">•</span>
-          <span><span className="font-mono text-yellow-400 font-black">F / E</span> Al</span>
-          <span className="text-slate-600">•</span>
-          <span><span className="font-mono text-red-400 font-black">4, 5, 6 (veya H)</span> İyileş</span>
+        {/* BOTTOM CENTER: Dedicated Inventory Hotbar (Heals & Boosts) */}
+        <div className="flex flex-col items-center gap-1.5 pointer-events-auto">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+            <Package className="w-3 h-3 text-emerald-400" />
+            <span>İlk Yardım & İyileşme Envanteri</span>
+          </div>
+
+          <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 backdrop-blur-md shadow-2xl">
+            {/* Bandage Slot */}
+            <button
+              type="button"
+              onClick={() => onUseHeal('bandage')}
+              className={`px-3 py-2 rounded-xl flex items-center gap-2 border transition-all cursor-pointer ${
+                (myPlayer.heals?.bandage || 0) > 0
+                  ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/80 shadow-md shadow-emerald-500/20 active:scale-95'
+                  : 'bg-slate-800/50 border-slate-700/60 text-slate-500 opacity-60'
+              }`}
+              title="Sargı Bezi [Tuş: 4]"
+            >
+              <span className="text-lg">🩹</span>
+              <div className="flex flex-col text-left">
+                <div className="text-[10px] font-bold leading-none">Sargı Bezi</div>
+                <div className="text-xs font-mono font-black text-white">x{myPlayer.heals?.bandage || 0}</div>
+              </div>
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-[10px] font-mono font-bold text-amber-400 border border-slate-700">
+                [4]
+              </span>
+            </button>
+
+            {/* Medkit Slot */}
+            <button
+              type="button"
+              onClick={() => onUseHeal('medkit')}
+              className={`px-3 py-2 rounded-xl flex items-center gap-2 border transition-all cursor-pointer ${
+                (myPlayer.heals?.medkit || 0) > 0
+                  ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/80 shadow-md shadow-emerald-500/20 active:scale-95'
+                  : 'bg-slate-800/50 border-slate-700/60 text-slate-500 opacity-60'
+              }`}
+              title="İlk Yardım Çantası [Tuş: 5]"
+            >
+              <span className="text-lg">🧰</span>
+              <div className="flex flex-col text-left">
+                <div className="text-[10px] font-bold leading-none">İlk Yardım</div>
+                <div className="text-xs font-mono font-black text-white">x{myPlayer.heals?.medkit || 0}</div>
+              </div>
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-[10px] font-mono font-bold text-amber-400 border border-slate-700">
+                [5]
+              </span>
+            </button>
+
+            {/* Soda / Energy Drink Slot */}
+            <button
+              type="button"
+              onClick={() => onUseHeal('soda')}
+              className={`px-3 py-2 rounded-xl flex items-center gap-2 border transition-all cursor-pointer ${
+                (myPlayer.heals?.soda || 0) > 0
+                  ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/80 shadow-md shadow-emerald-500/20 active:scale-95'
+                  : 'bg-slate-800/50 border-slate-700/60 text-slate-500 opacity-60'
+              }`}
+              title="Enerji İçeceği [Tuş: 6]"
+            >
+              <span className="text-lg">🥤</span>
+              <div className="flex flex-col text-left">
+                <div className="text-[10px] font-bold leading-none">Enerji</div>
+                <div className="text-xs font-mono font-black text-white">x{myPlayer.heals?.soda || 0}</div>
+              </div>
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-[10px] font-mono font-bold text-amber-400 border border-slate-700">
+                [6]
+              </span>
+            </button>
+          </div>
         </div>
 
-        {/* Bottom Right: Weapons & Ammo Arsenal */}
+        {/* BOTTOM RIGHT: High Visibility Weapons Arsenal & Ammo */}
         <div className="flex flex-col items-end gap-2 pointer-events-auto">
           {/* Pickup Hint button */}
           <button
@@ -256,54 +359,92 @@ export default function SurvivalHUD({
             <span>[F] Yerden Al</span>
           </button>
 
-          {/* Weapon Slots Row */}
+          {/* Large Active Weapon & Ammo Arsenal Box */}
           <div className="flex items-center gap-2">
-            {/* Slot 1: Primary */}
+            {/* Slot 1: Primary Weapon */}
             <button
               type="button"
               onClick={() => onSwitchSlot('primary')}
-              className={`p-2.5 sm:p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[90px] sm:min-w-[110px] ${
+              className={`p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[130px] sm:min-w-[150px] relative overflow-hidden ${
                 myPlayer.activeSlot === 'primary'
-                  ? 'bg-blue-600/30 border-blue-500 shadow-lg shadow-blue-500/20'
+                  ? 'bg-slate-900/95 border-2 border-amber-400 shadow-xl shadow-amber-500/20 ring-2 ring-amber-400/30'
                   : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600'
               }`}
             >
-              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-0.5">
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
                 <span>[1] BİRİNCİL</span>
-                <span>{myPlayer.weapons?.primary?.icon || '🔫'}</span>
+                <span className="text-base">{myPlayer.weapons?.primary?.icon || '🔫'}</span>
               </div>
-              <div className="font-heading font-black text-xs sm:text-sm text-white truncate">
+              <div className="font-heading font-black text-sm sm:text-base text-white truncate">
                 {myPlayer.weapons?.primary?.name || 'Boş'}
               </div>
-              {myPlayer.weapons?.primary && !myPlayer.weapons.primary.isMelee && (
-                <div className="text-[11px] font-mono font-bold text-blue-400 mt-0.5">
-                  {myPlayer.weapons.primary.ammo} / {myPlayer.ammo?.[myPlayer.weapons.primary.ammoType] || 0}
+
+              {myPlayer.weapons?.primary && !myPlayer.weapons.primary.isMelee ? (
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-black font-mono text-amber-400 leading-none">
+                    {myPlayer.weapons.primary.ammo}
+                  </span>
+                  <span className="text-xs font-bold text-slate-400 font-mono">
+                    / {myPlayer.ammo?.[myPlayer.weapons.primary.ammoType] || 0}
+                  </span>
+                  <span className="ml-auto text-[9px] font-bold text-slate-500 uppercase">
+                    {myPlayer.weapons.primary.ammoType}
+                  </span>
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-500 mt-1">Loot Yap</div>
+              )}
+
+              {/* Reloading Overlay */}
+              {myPlayer.weapons?.primary?.isReloading && (
+                <div className="absolute inset-0 bg-amber-950/90 flex items-center justify-center gap-1.5 text-xs font-bold text-amber-300 animate-pulse">
+                  <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Dolduruluyor...</span>
                 </div>
               )}
             </button>
 
-            {/* Slot 2: Secondary */}
+            {/* Slot 2: Secondary Weapon */}
             <button
               type="button"
               onClick={() => onSwitchSlot('secondary')}
-              className={`p-2.5 sm:p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[90px] sm:min-w-[120px] ${
+              className={`p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[130px] sm:min-w-[150px] relative overflow-hidden ${
                 myPlayer.activeSlot === 'secondary'
-                  ? 'bg-blue-600/30 border-blue-500 shadow-lg shadow-blue-500/20'
+                  ? 'bg-slate-900/95 border-2 border-amber-400 shadow-xl shadow-amber-500/20 ring-2 ring-amber-400/30'
                   : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600'
               }`}
             >
-              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-0.5">
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
                 <span>[2] İKİNCİL</span>
-                <span>{myPlayer.weapons?.secondary?.icon || '—'}</span>
+                <span className="text-base">{myPlayer.weapons?.secondary?.icon || '—'}</span>
               </div>
-              <div className="font-heading font-black text-xs sm:text-sm text-white truncate">
+              <div className="font-heading font-black text-sm sm:text-base text-white truncate">
                 {myPlayer.weapons?.secondary?.name || (
-                  <span className="text-slate-400 font-normal text-[11px]">Boş (Loot bul)</span>
+                  <span className="text-slate-500 font-normal text-xs">Boş Slot</span>
                 )}
               </div>
-              {myPlayer.weapons?.secondary && !myPlayer.weapons.secondary.isMelee && (
-                <div className="text-[11px] font-mono font-bold text-blue-400 mt-0.5">
-                  {myPlayer.weapons.secondary.ammo} / {myPlayer.ammo?.[myPlayer.weapons.secondary.ammoType] || 0}
+
+              {myPlayer.weapons?.secondary && !myPlayer.weapons.secondary.isMelee ? (
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-2xl font-black font-mono text-amber-400 leading-none">
+                    {myPlayer.weapons.secondary.ammo}
+                  </span>
+                  <span className="text-xs font-bold text-slate-400 font-mono">
+                    / {myPlayer.ammo?.[myPlayer.weapons.secondary.ammoType] || 0}
+                  </span>
+                  <span className="ml-auto text-[9px] font-bold text-slate-500 uppercase">
+                    {myPlayer.weapons.secondary.ammoType}
+                  </span>
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-500 mt-1">Silah Bul</div>
+              )}
+
+              {/* Reloading Overlay */}
+              {myPlayer.weapons?.secondary?.isReloading && (
+                <div className="absolute inset-0 bg-amber-950/90 flex items-center justify-center gap-1.5 text-xs font-bold text-amber-300 animate-pulse">
+                  <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Dolduruluyor...</span>
                 </div>
               )}
             </button>
@@ -312,30 +453,28 @@ export default function SurvivalHUD({
             <button
               type="button"
               onClick={() => onSwitchSlot('melee')}
-              className={`p-2.5 sm:p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[70px] ${
+              className={`p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[70px] ${
                 myPlayer.activeSlot === 'melee'
-                  ? 'bg-amber-600/30 border-amber-500 shadow-lg shadow-amber-500/20'
+                  ? 'bg-amber-600/30 border-2 border-amber-400 shadow-xl shadow-amber-500/20'
                   : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600'
               }`}
             >
-              <div className="text-[10px] font-bold text-slate-400 mb-0.5">
-                [3] YUMRUK
-              </div>
-              <div className="font-heading font-black text-xs sm:text-sm text-white flex items-center gap-1">
+              <div className="text-[10px] font-bold text-slate-400 mb-1">[3] YUMRUK</div>
+              <div className="font-heading font-black text-xl text-white flex items-center justify-center py-0.5">
                 <span>👊</span>
               </div>
             </button>
 
-            {/* Reload Button */}
+            {/* Quick Reload Button */}
             {activeWeapon && !activeWeapon.isMelee && (
               <button
                 type="button"
                 onClick={onReload}
-                className="p-3 rounded-2xl bg-slate-900/90 border border-slate-700 hover:bg-slate-800 text-white font-bold text-xs shadow-lg transition active:scale-95 cursor-pointer flex flex-col items-center justify-center"
-                title="Şarjör Değiştir [R]"
+                className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700 hover:bg-slate-800 text-white font-bold text-xs shadow-lg transition active:scale-95 cursor-pointer flex flex-col items-center justify-center"
+                title="Şarjör Değiştir [Tuş: R]"
               >
-                <RotateCcw className={`w-4 h-4 ${activeWeapon.isReloading ? 'animate-spin text-amber-400' : ''}`} />
-                <span className="text-[9px] text-slate-400 mt-0.5">R</span>
+                <RotateCcw className={`w-5 h-5 ${activeWeapon.isReloading ? 'animate-spin text-amber-400' : 'text-slate-300'}`} />
+                <span className="text-[10px] text-amber-400 font-mono font-black mt-1">R</span>
               </button>
             )}
           </div>

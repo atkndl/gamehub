@@ -490,8 +490,8 @@ export class SurvivalSession {
       });
     }
 
-    // Scopes (2x, 4x, 8x)
-    ['2x', '2x', '2x', '4x', '4x', '4x', '8x', '8x'].forEach(scopeKey => {
+    // Scopes (2x, 4x, 8x - 8x is extremely rare)
+    ['2x', '2x', '2x', '2x', '2x', '2x', '4x', '4x', '4x', '8x'].forEach(scopeKey => {
       this.spawnLoot({
         x: 400 + Math.floor(Math.random() * (S - 800)),
         y: 400 + Math.floor(Math.random() * (S - 800)),
@@ -537,8 +537,8 @@ export class SurvivalSession {
       drops.push({ type: 'weapon', itemKey: picked, name: WEAPONS[picked].name, icon: WEAPONS[picked].icon });
       drops.push({ type: 'ammo', itemKey: WEAPONS[picked].ammoType, count: 40, name: `${WEAPONS[picked].ammoType.toUpperCase()} Mermi`, icon: '📦' });
     } else if (roll < 0.7) {
-      const scopes = ['2x', '4x', '8x'];
-      const s = scopes[Math.floor(Math.random() * scopes.length)];
+      const scopeRoll = Math.random();
+      const s = scopeRoll < 0.65 ? '2x' : (scopeRoll < 0.94 ? '4x' : '8x');
       drops.push({ type: 'scope', itemKey: s, name: SCOPES[s].name, icon: '🔭' });
     } else if (roll < 0.85) {
       const lvl = Math.random() < 0.6 ? 2 : 3;
@@ -953,14 +953,61 @@ export class SurvivalSession {
       if (!destroyed) {
         for (const ob of this.obstacles) {
           if (b.x >= ob.x && b.x <= ob.x + ob.w && b.y >= ob.y && b.y <= ob.y + ob.h) {
-            destroyed = true;
-            if (ob.type === 'crate') {
-              ob.hp -= b.damage;
-              if (ob.hp <= 0) {
-                this.dropCrateLoot(ob);
+            if (ob.type === 'container') {
+              // Metal shipping container ricochet physics!
+              b.ricochetCount = (b.ricochetCount || 0) + 1;
+              b.hasRicocheted = true;
+
+              if (b.ricochetCount > 3) {
+                destroyed = true;
+              } else {
+                // Determine which face was hit based on previous position before tick step
+                const prevX = b.x - b.vx;
+                const prevY = b.y - b.vy;
+
+                if (prevX <= ob.x) {
+                  // Hit left face
+                  b.vx = -Math.abs(b.vx);
+                  b.x = ob.x - 2;
+                } else if (prevX >= ob.x + ob.w) {
+                  // Hit right face
+                  b.vx = Math.abs(b.vx);
+                  b.x = ob.x + ob.w + 2;
+                } else if (prevY <= ob.y) {
+                  // Hit top face
+                  b.vy = -Math.abs(b.vy);
+                  b.y = ob.y - 2;
+                } else {
+                  // Hit bottom face
+                  b.vy = Math.abs(b.vy);
+                  b.y = ob.y + ob.h + 2;
+                }
+
+                // Add slight acoustic deflection for authentic metal ricochet
+                const deflection = (Math.random() - 0.5) * 0.12;
+                const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy) * 0.94;
+                const angle = Math.atan2(b.vy, b.vx) + deflection;
+                b.vx = Math.cos(angle) * spd;
+                b.vy = Math.sin(angle) * spd;
+
+                events.push({
+                  type: 'ricochet',
+                  x: b.x,
+                  y: b.y,
+                  weaponId: b.weaponId
+                });
               }
+              break;
+            } else {
+              destroyed = true;
+              if (ob.type === 'crate') {
+                ob.hp -= b.damage;
+                if (ob.hp <= 0) {
+                  this.dropCrateLoot(ob);
+                }
+              }
+              break;
             }
-            break;
           }
         }
       }
@@ -981,10 +1028,11 @@ export class SurvivalSession {
         }
       }
 
-      // Check bullet hit on players
+      // Check bullet hit on players (if bullet ricocheted, it can hit the shooter themselves!)
       if (!destroyed) {
         for (const victim of Object.values(this.players)) {
-          if (victim.id === b.shooterId || !victim.isAlive) continue;
+          if (!b.hasRicocheted && victim.id === b.shooterId) continue;
+          if (!victim.isAlive) continue;
           if (now < victim.invulnerableUntil) continue;
 
           if (distance(b.x, b.y, victim.x, victim.y) <= victim.radius) {
@@ -1133,11 +1181,19 @@ export class SurvivalSession {
   }
 
   getState() {
+    const now = Date.now();
+    const isShrinking = this.zone ? this.zone.currentRadius > this.zone.targetRadius : false;
+    const timeUntilNext = this.zone?.nextPhaseTime ? Math.max(0, Math.ceil((this.zone.nextPhaseTime - now) / 1000)) : 0;
+
     return {
       mode: this.mode,
       mapSize: this.mapSize,
-      zone: this.zone,
-      timeLeft: this.endTime ? Math.max(0, Math.ceil((this.endTime - Date.now()) / 1000)) : null,
+      zone: this.zone ? {
+        ...this.zone,
+        isShrinking,
+        timeUntilNext
+      } : null,
+      timeLeft: this.endTime ? Math.max(0, Math.ceil((this.endTime - now) / 1000)) : null,
       obstacles: this.obstacles,
       circularObstacles: this.circularObstacles,
       bushes: this.bushes,

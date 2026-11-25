@@ -1,13 +1,21 @@
 import React, { useRef, useEffect } from 'react';
 import { SCOPES, WEAPONS } from '../../../server/survivalLogic';
 
-export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onStopShoot }) {
+export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, onShoot, onStopShoot }) {
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const myPlayerIdRef = useRef(myPlayerId);
+  myPlayerIdRef.current = myPlayerId;
+
   const smoothCamRef = useRef({ x: 2100, y: 2100 });
+  const localPredictedRef = useRef({ x: 2100, y: 2100, initialized: false });
   const interpPlayersRef = useRef({});
   const prevHpRef = useRef(null);
   const damageFlashRef = useRef(0);
+  const sparksRef = useRef([]); // Metallic ricochet sparks
 
   // Handle Mouse Aiming & Shooting
   useEffect(() => {
@@ -28,7 +36,6 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
 
     const handleMouseDown = (e) => {
       if (e.button === 0) {
-        // Left click
         onShoot();
       }
     };
@@ -40,7 +47,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
     };
 
     const handleContextMenu = (e) => {
-      e.preventDefault(); // Prevent right-click context menu
+      e.preventDefault();
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -56,7 +63,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
     };
   }, [onAim, onShoot, onStopShoot]);
 
-  // Handle Canvas Rendering Loop
+  // Handle Canvas Rendering Loop - Continuous & Independent of React Re-renders
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -70,20 +77,44 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
 
       const width = canvas.width;
       const height = canvas.height;
+      const curState = stateRef.current;
+      const curMyPlayerId = myPlayerIdRef.current;
 
-      // Find my player
-      const myPlayer = state?.players?.find(p => p.id === myPlayerId);
-      const targetCamX = myPlayer ? myPlayer.x : 2100;
-      const targetCamY = myPlayer ? myPlayer.y : 2100;
+      // Find my player in current server state
+      const myPlayer = curState?.players?.find(p => p.id === curMyPlayerId);
 
-      // Smooth camera interpolation towards target (eliminates 25Hz server tick stutter)
-      smoothCamRef.current.x += (targetCamX - smoothCamRef.current.x) * 0.28;
-      smoothCamRef.current.y += (targetCamY - smoothCamRef.current.y) * 0.28;
-      const camX = smoothCamRef.current.x;
-      const camY = smoothCamRef.current.y;
-
-      // Detect damage taken for full-screen red flash
+      // Local player prediction & reconciliation
       if (myPlayer) {
+        if (!localPredictedRef.current.initialized) {
+          localPredictedRef.current = { x: myPlayer.x, y: myPlayer.y, initialized: true };
+        } else {
+          // Client-side input prediction
+          const keys = keysDownRef?.current;
+          let mx = 0;
+          let my = 0;
+          if (keys?.w) my -= 1;
+          if (keys?.s) my += 1;
+          if (keys?.a) mx -= 1;
+          if (keys?.d) mx += 1;
+
+          if (mx !== 0 && my !== 0) {
+            mx *= 0.7071;
+            my *= 0.7071;
+          }
+
+          let spdMult = myPlayer.isWet ? (myPlayer.inWater ? 0.70 : 0.82) : 1.0;
+          if (myPlayer.boost > 0) spdMult += (myPlayer.boost / 100) * 0.3;
+          const frameSpeed = 6.8 * spdMult;
+
+          localPredictedRef.current.x += mx * frameSpeed;
+          localPredictedRef.current.y += my * frameSpeed;
+
+          // Smoothly reconcile towards authoritative server position
+          localPredictedRef.current.x += (myPlayer.x - localPredictedRef.current.x) * 0.22;
+          localPredictedRef.current.y += (myPlayer.y - localPredictedRef.current.y) * 0.22;
+        }
+
+        // Detect damage taken for full-screen red flash
         if (prevHpRef.current !== null && myPlayer.hp < prevHpRef.current - 0.5) {
           const lost = prevHpRef.current - myPlayer.hp;
           damageFlashRef.current = Math.min(0.70, 0.30 + lost * 0.02);
@@ -91,9 +122,18 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         prevHpRef.current = myPlayer.hp;
       }
 
+      const targetCamX = localPredictedRef.current.initialized ? localPredictedRef.current.x : 2100;
+      const targetCamY = localPredictedRef.current.initialized ? localPredictedRef.current.y : 2100;
+
+      // Ultra-smooth camera glide following predicted position
+      smoothCamRef.current.x += (targetCamX - smoothCamRef.current.x) * 0.35;
+      smoothCamRef.current.y += (targetCamY - smoothCamRef.current.y) * 0.35;
+      const camX = smoothCamRef.current.x;
+      const camY = smoothCamRef.current.y;
+
       // Determine camera zoom based on equipped scope
       const scopeKey = myPlayer?.scope || '1x';
-      const zoom = SCOPES[scopeKey]?.zoom || 1.0;
+      const zoom = SCOPES[scopeKey]?.zoom || 1.65;
 
       // 1. Clear background
       ctx.fillStyle = '#0a0f1d';
@@ -107,7 +147,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       ctx.scale(zoom, zoom);
       ctx.translate(-camX, -camY);
 
-      const mapSize = state?.mapSize || 4200;
+      const mapSize = curState?.mapSize || 4200;
 
       // 2. Render Ground Terrain (Tactical dark grass with subtle grid)
       ctx.fillStyle = '#162217';
@@ -136,8 +176,8 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       ctx.strokeRect(0, 0, mapSize, mapSize);
 
       // 3. Render Water Ponds
-      if (Array.isArray(state?.ponds)) {
-        state.ponds.forEach(pond => {
+      if (Array.isArray(curState?.ponds)) {
+        curState.ponds.forEach(pond => {
           ctx.save();
           // Sandy shoreline
           ctx.beginPath();
@@ -164,8 +204,8 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       }
 
       // 4. Render Ground Loot
-      if (Array.isArray(state?.loot)) {
-        state.loot.forEach(item => {
+      if (Array.isArray(curState?.loot)) {
+        curState.loot.forEach(item => {
           ctx.save();
           const bob = Math.sin(Date.now() / 250) * 2.5;
 
@@ -199,8 +239,8 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       }
 
       // 5. Render Rectangular Obstacles (Crates, Shipping Containers, Buildings)
-      if (Array.isArray(state?.obstacles)) {
-        state.obstacles.forEach(ob => {
+      if (Array.isArray(curState?.obstacles)) {
+        curState.obstacles.forEach(ob => {
           ctx.save();
 
           if (ob.type === 'crate') {
@@ -228,13 +268,13 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
               ctx.fillRect(ob.x + 4, ob.y - 10, (ob.w - 8) * hpPct, 4);
             }
           } else if (ob.type === 'container') {
-            // Shipping Container (Corrugated metal box)
+            // Shipping Container (Corrugated metal box - BULLETS RICOCHET OFF THIS!)
             const color = ob.color || '#dc2626';
             ctx.fillStyle = color;
             ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
 
-            // Outer dark rim
-            ctx.strokeStyle = '#0f172a';
+            // Metallic sheen border
+            ctx.strokeStyle = '#94a3b8';
             ctx.lineWidth = 3;
             ctx.strokeRect(ob.x, ob.y, ob.w, ob.h);
 
@@ -243,13 +283,13 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
             const isHorizontal = ob.w > ob.h;
             if (isHorizontal) {
               for (let rx = ob.x + 10; rx < ob.x + ob.w - 6; rx += 14) {
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
                 ctx.beginPath();
                 ctx.moveTo(rx, ob.y + 2);
                 ctx.lineTo(rx, ob.y + ob.h - 2);
                 ctx.stroke();
 
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
                 ctx.beginPath();
                 ctx.moveTo(rx + 2, ob.y + 2);
                 ctx.lineTo(rx + 2, ob.y + ob.h - 2);
@@ -257,13 +297,13 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
               }
             } else {
               for (let ry = ob.y + 10; ry < ob.y + ob.h - 6; ry += 14) {
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
                 ctx.beginPath();
                 ctx.moveTo(ob.x + 2, ry);
                 ctx.lineTo(ob.x + ob.w - 2, ry);
                 ctx.stroke();
 
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
                 ctx.beginPath();
                 ctx.moveTo(ob.x + 2, ry + 2);
                 ctx.lineTo(ob.x + ob.w - 2, ry + 2);
@@ -271,115 +311,74 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
               }
             }
 
-            // Corner steel castings
-            ctx.fillStyle = '#1e293b';
-            const cs = 7;
-            ctx.fillRect(ob.x, ob.y, cs, cs);
-            ctx.fillRect(ob.x + ob.w - cs, ob.y, cs, cs);
-            ctx.fillRect(ob.x, ob.y + ob.h - cs, cs, cs);
-            ctx.fillRect(ob.x + ob.w - cs, ob.y + ob.h - cs, cs, cs);
-
-            // Container stencil text
-            ctx.font = 'bold 9px monospace';
+            // Small "METAL / RICOCHET" label icon
+            ctx.font = 'bold 9px sans-serif';
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
             ctx.textAlign = 'center';
-            ctx.fillText(ob.label || 'CARGO', ob.x + ob.w / 2, ob.y + ob.h / 2 + 3);
-          } else {
-            // Concrete / Brick House Walls
+            ctx.fillText('⚡ METAL', ob.x + ob.w / 2, ob.y + ob.h / 2 + 3);
+          } else if (ob.type === 'wall') {
             ctx.fillStyle = '#475569';
             ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
-
-            // Shaded border
             ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 3.5;
-            ctx.strokeRect(ob.x, ob.y, ob.w, ob.h);
-
-            // Diagonal roof stripes
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
             ctx.lineWidth = 2;
-            for (let s = -ob.h; s < ob.w; s += 24) {
-              ctx.beginPath();
-              ctx.moveTo(ob.x + Math.max(0, s), ob.y);
-              ctx.lineTo(ob.x + Math.min(ob.w, s + ob.h), ob.y + Math.min(ob.h, ob.w - s));
-              ctx.stroke();
-            }
+            ctx.strokeRect(ob.x, ob.y, ob.w, ob.h);
           }
 
           ctx.restore();
         });
       }
 
-      // 6. Render Circular Obstacles (Trees, Rocks, Red Explosive Barrels)
-      if (Array.isArray(state?.circularObstacles)) {
-        state.circularObstacles.forEach(cob => {
+      // 6. Render Circular Obstacles (Barrels, Rocks, Trees)
+      if (Array.isArray(curState?.circularObstacles)) {
+        curState.circularObstacles.forEach(cob => {
           ctx.save();
 
           if (cob.type === 'barrel') {
-            // Red Explosive Barrel
+            // Explosive Red Barrel
             ctx.beginPath();
             ctx.arc(cob.x, cob.y, cob.radius, 0, Math.PI * 2);
-            ctx.fillStyle = '#dc2626'; // Vibrant Red
+            ctx.fillStyle = '#dc2626';
             ctx.fill();
             ctx.strokeStyle = '#7f1d1d';
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Inner hazard ring
+            // Hazard Warning stripes
             ctx.beginPath();
-            ctx.arc(cob.x, cob.y, cob.radius * 0.65, 0, Math.PI * 2);
-            ctx.strokeStyle = '#fef08a';
-            ctx.lineWidth = 2;
-            ctx.stroke();
+            ctx.arc(cob.x, cob.y, cob.radius * 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#facc15';
+            ctx.fill();
 
-            // Flame / Hazard icon
-            ctx.font = '14px sans-serif';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillStyle = '#000000';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('🔥', cob.x, cob.y);
-
-            // Barrel HP bar if damaged
-            if (cob.hp < cob.maxHp) {
-              const hpPct = cob.hp / cob.maxHp;
-              ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-              ctx.fillRect(cob.x - cob.radius, cob.y - cob.radius - 8, cob.radius * 2, 4);
-              ctx.fillStyle = '#ef4444';
-              ctx.fillRect(cob.x - cob.radius, cob.y - cob.radius - 8, cob.radius * 2 * hpPct, 4);
-            }
+            ctx.fillText('☣', cob.x, cob.y);
           } else if (cob.type === 'rock') {
-            // Natural Granite Boulder
+            // Boulder / Rock
             ctx.beginPath();
             ctx.arc(cob.x, cob.y, cob.radius, 0, Math.PI * 2);
-            ctx.fillStyle = '#64748b'; // Slate granite
+            ctx.fillStyle = '#64748b';
             ctx.fill();
             ctx.strokeStyle = '#334155';
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Chiseled rock facets & highlights
             ctx.beginPath();
             ctx.arc(cob.x - cob.radius * 0.25, cob.y - cob.radius * 0.25, cob.radius * 0.45, 0, Math.PI * 2);
-            ctx.fillStyle = '#94a3b8';
-            ctx.fill();
-
-            // Moss patch
-            ctx.beginPath();
-            ctx.arc(cob.x + cob.radius * 0.35, cob.y + cob.radius * 0.25, cob.radius * 0.3, 0, Math.PI * 2);
-            ctx.fillStyle = '#15803d';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
             ctx.fill();
           } else if (cob.type === 'tree') {
-            // Solid Tree Trunk & Root Base
+            // Tree Trunk
             ctx.beginPath();
-            ctx.arc(cob.x, cob.y, cob.radius, 0, Math.PI * 2);
-            ctx.fillStyle = '#3f1d0b'; // Dark bark
+            ctx.arc(cob.x, cob.y, cob.radius * 0.45, 0, Math.PI * 2);
+            ctx.fillStyle = '#78350f';
             ctx.fill();
-            ctx.strokeStyle = '#1c0d02';
-            ctx.lineWidth = 3;
-            ctx.stroke();
 
             // Tree Canopy Foliage Overhead
             ctx.beginPath();
             ctx.arc(cob.x, cob.y, cob.radius * 1.55, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(21, 128, 61, 0.88)'; // Lush green
+            ctx.fillStyle = 'rgba(21, 128, 61, 0.88)';
             ctx.fill();
 
             // Canopy inner highlight
@@ -393,56 +392,64 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         });
       }
 
-      // 7. Render Flying Glowing Bullets
-      if (Array.isArray(state?.bullets)) {
-        state.bullets.forEach(b => {
+      // 7. Render Flying Glowing Bullets & Metallic Ricochet Trails
+      if (Array.isArray(curState?.bullets)) {
+        curState.bullets.forEach(b => {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = b.color || '#fef08a';
-          ctx.shadowColor = b.color || '#facc15';
-          ctx.shadowBlur = 8;
+          ctx.arc(b.x, b.y, b.hasRicocheted ? 4.5 : 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = b.hasRicocheted ? '#fef08a' : (b.color || '#fef08a');
+          ctx.shadowColor = b.hasRicocheted ? '#f59e0b' : (b.color || '#facc15');
+          ctx.shadowBlur = b.hasRicocheted ? 12 : 8;
           ctx.fill();
 
           // Tracer line
           ctx.beginPath();
           ctx.moveTo(b.x, b.y);
           ctx.lineTo(b.x - b.vx * 2, b.y - b.vy * 2);
-          ctx.strokeStyle = b.color || '#fef08a';
-          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = b.hasRicocheted ? '#fbbf24' : (b.color || '#fef08a');
+          ctx.lineWidth = b.hasRicocheted ? 3.5 : 2.5;
           ctx.stroke();
           ctx.restore();
         });
       }
 
       // 8. Render Players
-      if (Array.isArray(state?.players)) {
-        state.players.forEach(p => {
+      if (Array.isArray(curState?.players)) {
+        curState.players.forEach(p => {
           if (!p.isAlive) return;
 
-          let interp = interpPlayersRef.current[p.id];
-          if (!interp) {
-            interp = { x: p.x, y: p.y, angle: p.angle || 0 };
-            interpPlayersRef.current[p.id] = interp;
+          const isSelf = p.id === curMyPlayerId;
+
+          let renderX = p.x;
+          let renderY = p.y;
+          let renderAngle = p.angle || 0;
+
+          if (isSelf && localPredictedRef.current.initialized) {
+            renderX = localPredictedRef.current.x;
+            renderY = localPredictedRef.current.y;
           } else {
-            interp.x += (p.x - interp.x) * 0.35;
-            interp.y += (p.y - interp.y) * 0.35;
-            let diff = (p.angle || 0) - interp.angle;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            interp.angle += diff * 0.35;
+            let interp = interpPlayersRef.current[p.id];
+            if (!interp) {
+              interp = { x: p.x, y: p.y, angle: p.angle || 0 };
+              interpPlayersRef.current[p.id] = interp;
+            } else {
+              interp.x += (p.x - interp.x) * 0.35;
+              interp.y += (p.y - interp.y) * 0.35;
+              let diff = (p.angle || 0) - interp.angle;
+              while (diff < -Math.PI) diff += Math.PI * 2;
+              while (diff > Math.PI) diff -= Math.PI * 2;
+              interp.angle += diff * 0.35;
+            }
+            renderX = interp.x;
+            renderY = interp.y;
+            renderAngle = interp.angle;
           }
-
-          const renderX = interp.x;
-          const renderY = interp.y;
-          const renderAngle = interp.angle;
-
-          const isSelf = p.id === myPlayerId;
 
           // Check if player is concealed in a bush
           let insideBush = false;
-          if (Array.isArray(state?.bushes)) {
-            for (const bush of state.bushes) {
+          if (Array.isArray(curState?.bushes)) {
+            for (const bush of curState.bushes) {
               const dx = renderX - bush.x;
               const dy = renderY - bush.y;
               if (dx * dx + dy * dy < bush.radius * bush.radius) {
@@ -452,9 +459,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
             }
           }
 
-          // If another player is hidden in bush and not self, hide them!
           if (insideBush && !isSelf) {
-            // Concealed! Skip rendering unless shooting
             if (!p.isShooting) return;
           }
 
@@ -463,7 +468,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
           ctx.rotate(renderAngle);
 
           if (insideBush && isSelf) {
-            ctx.globalAlpha = 0.55; // Semi-transparent to indicate camouflage
+            ctx.globalAlpha = 0.55;
           }
 
           // Hands & Weapon
@@ -471,7 +476,6 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
           const isMelee = !active || active.isMelee;
 
           if (isMelee) {
-            // Punching Hands
             const punchOffset = p.isPunching ? 14 : 0;
             const rightHandX = 14 + (p.lastMeleePunchHand === 1 ? punchOffset : 0);
             const leftHandX = 14 + (p.lastMeleePunchHand === -1 ? punchOffset : 0);
@@ -495,27 +499,24 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
             ctx.stroke();
           } else {
             // Gun Barrel
-            const gunLen = active.length || 32;
+            const weaponLen = active.length || 32;
             ctx.fillStyle = '#1e293b';
-            ctx.fillRect(10, -4, gunLen, 8);
+            ctx.fillRect(8, -3.5, weaponLen, 7);
             ctx.strokeStyle = '#0f172a';
             ctx.lineWidth = 1.5;
-            ctx.strokeRect(10, -4, gunLen, 8);
+            ctx.strokeRect(8, -3.5, weaponLen, 7);
 
-            // Muzzle flash when firing
-            if (p.isShooting && !active.isReloading && active.ammo > 0) {
-              ctx.beginPath();
-              ctx.arc(10 + gunLen + 4, 0, 7.5, 0, Math.PI * 2);
-              ctx.fillStyle = '#fef08a';
-              ctx.shadowColor = '#f59e0b';
-              ctx.shadowBlur = 12;
-              ctx.fill();
-            }
-
-            // Both Hands gripping the gun
+            // Hands gripping weapon
             ctx.beginPath();
-            ctx.arc(15, -10, 7, 0, Math.PI * 2);
-            ctx.arc(22, 6, 7, 0, Math.PI * 2);
+            ctx.arc(14, -13, 7, 0, Math.PI * 2);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fill();
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(weaponLen - 6, 7, 7, 0, Math.PI * 2);
             ctx.fillStyle = '#f59e0b';
             ctx.fill();
             ctx.strokeStyle = '#78350f';
@@ -523,99 +524,103 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
             ctx.stroke();
           }
 
-          // Player Body (Round Circle)
+          // Main Player Circle Body
           ctx.beginPath();
           ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
-          ctx.fillStyle = isSelf ? '#3b82f6' : '#ef4444'; // Blue for self, Red for enemies
+          ctx.fillStyle = isSelf ? '#38bdf8' : '#f87171';
           ctx.fill();
-          ctx.strokeStyle = '#0f172a';
-          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = isSelf ? '#0284c7' : '#dc2626';
+          ctx.lineWidth = 3;
           ctx.stroke();
 
-          // Vest Armor Ring
+          // Vest Armor Outline
           if (p.vestLevel > 0) {
             ctx.beginPath();
-            ctx.arc(0, 0, p.radius * 0.72, 0, Math.PI * 2);
-            ctx.strokeStyle = p.vestLevel === 3 ? '#38bdf8' : (p.vestLevel === 2 ? '#22c55e' : '#94a3b8');
-            ctx.lineWidth = 3;
+            ctx.arc(0, 0, p.radius - 4, 0, Math.PI * 2);
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 3.5;
             ctx.stroke();
           }
 
-          // Helmet Visor
+          // Helmet Armor Outline
           if (p.helmetLevel > 0) {
-            ctx.fillStyle = p.helmetLevel === 3 ? '#0284c7' : (p.helmetLevel === 2 ? '#15803d' : '#64748b');
-            ctx.fillRect(p.radius * 0.2, -6, 8, 12);
+            ctx.beginPath();
+            ctx.arc(0, 0, p.radius * 0.45, 0, Math.PI * 2);
+            ctx.fillStyle = '#1e293b';
+            ctx.fill();
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+            ctx.stroke();
           }
 
-          // Invulnerability Shield
+          // Invulnerability Shield Glow
           if (p.isInvulnerable) {
             ctx.beginPath();
-            ctx.arc(0, 0, p.radius * 1.5, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+            ctx.arc(0, 0, p.radius + 6, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
             ctx.lineWidth = 3;
+            ctx.setLineDash([6, 6]);
             ctx.stroke();
+            ctx.setLineDash([]);
           }
 
           ctx.restore();
 
-          // Player Name & Mini Health Bar (drawn upright without rotation)
+          // Player Name & HP overhead tag
           ctx.save();
-          ctx.translate(p.x, p.y);
-
-          // Name Tag
           ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillStyle = isSelf ? '#60a5fa' : '#ffffff';
-          ctx.fillText(`${p.avatar || '🎖️'} ${p.name}${isSelf ? ' (Sen)' : ''}`, 0, -p.radius - 14);
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowBlur = 4;
+          ctx.shadowColor = '#000000';
+          ctx.fillText(`${p.avatar || ''} ${p.name}`, renderX, renderY - p.radius - 16);
 
-          // Health bar
-          const barW = 38;
-          const barH = 4;
-          const hpPct = Math.max(0, p.hp / p.maxHp);
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-          ctx.fillRect(-barW / 2, -p.radius - 8, barW, barH);
-          ctx.fillStyle = hpPct > 0.5 ? '#22c55e' : (hpPct > 0.25 ? '#eab308' : '#ef4444');
-          ctx.fillRect(-barW / 2, -p.radius - 8, barW * hpPct, barH);
-
-          // Vest bar if any
-          if (p.vest > 0) {
-            const vestPct = p.vest / 100;
-            ctx.fillStyle = '#38bdf8';
-            ctx.fillRect(-barW / 2, -p.radius - 12, barW * vestPct, 2.5);
-          }
+          // Small HP Bar overhead
+          const hpWidth = 36;
+          const hpHeight = 4;
+          const hpRatio = Math.max(0, p.hp / p.maxHp);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(renderX - hpWidth / 2, renderY - p.radius - 12, hpWidth, hpHeight);
+          ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : (hpRatio > 0.25 ? '#f59e0b' : '#ef4444');
+          ctx.fillRect(renderX - hpWidth / 2, renderY - p.radius - 12, hpWidth * hpRatio, hpHeight);
 
           ctx.restore();
         });
       }
 
-      // 9. Render Camouflage Bushes (Top layer so players can hide inside!)
-      if (Array.isArray(state?.bushes)) {
-        state.bushes.forEach(bush => {
+      // 9. Render Soft Bushes (Players inside are camouflaged)
+      if (Array.isArray(curState?.bushes)) {
+        curState.bushes.forEach(b => {
           ctx.save();
-          // Bush outer cluster
-          ctx.fillStyle = 'rgba(21, 128, 61, 0.82)';
           ctx.beginPath();
-          ctx.arc(bush.x, bush.y, bush.radius, 0, Math.PI * 2);
+          ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(22, 101, 52, 0.85)';
           ctx.fill();
 
-          // Leaf sub-circles for rich foliage texture
+          ctx.beginPath();
+          ctx.arc(b.x + b.radius * 0.2, b.y - b.radius * 0.2, b.radius * 0.6, 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(34, 197, 94, 0.4)';
-          for (let a = 0; a < Math.PI * 2; a += Math.PI / 3) {
-            const lx = bush.x + Math.cos(a) * (bush.radius * 0.55);
-            const ly = bush.y + Math.sin(a) * (bush.radius * 0.55);
-            ctx.beginPath();
-            ctx.arc(lx, ly, bush.radius * 0.45, 0, Math.PI * 2);
-            ctx.fill();
-          }
+          ctx.fill();
 
           ctx.restore();
         });
       }
 
-      // 10. Render Safe Zone / Toxic Red Gas Circle (Alan Modu)
-      if (state?.mode === 'battle_royale' && state?.zone) {
-        const z = state.zone;
+      // 10. Render Safe Zone (Alan Modu Red Zone Boundary & Target Circle)
+      if (curState?.mode === 'battle_royale' && curState?.zone) {
+        const z = curState.zone;
         ctx.save();
+
+        // Safe zone target circle (dotted white circle showing where the zone is shrinking to)
+        if (z.targetRadius && z.targetRadius < z.currentRadius) {
+          ctx.beginPath();
+          ctx.setLineDash([12, 12]);
+          ctx.arc(z.x, z.y, z.targetRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
 
         // Safe zone circle border
         ctx.beginPath();
@@ -628,7 +633,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         ctx.beginPath();
         ctx.rect(-2000, -2000, mapSize + 4000, mapSize + 4000);
         ctx.arc(z.x, z.y, z.currentRadius, 0, Math.PI * 2, true);
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.28)'; // Toxic red gas
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.28)';
         ctx.fill();
 
         // Pulsing border aura
@@ -645,7 +650,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       // Restore camera transform
       ctx.restore();
 
-      // --- FULL-SCREEN OVERLAYS (Wet Vignette & Damage Red Flash) ---
+      // --- FULL-SCREEN OVERLAYS (Wet Vignette, Damage Red Flash & Zone Danger Alert) ---
       // 1. Wet Vignette & Water Droplets (when wading or soaked)
       if (myPlayer?.isWet) {
         const wetAlpha = myPlayer.inWater ? 0.38 : 0.22;
@@ -683,8 +688,33 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         ctx.fillStyle = dmgGrad;
         ctx.fillRect(0, 0, width, height);
 
-        // Smooth decay per frame
         damageFlashRef.current = Math.max(0, damageFlashRef.current - 0.022);
+      }
+
+      // 3. Safe Zone Danger Alerts & Gas Pulsing
+      if (curState?.mode === 'battle_royale' && curState?.zone && myPlayer) {
+        const z = curState.zone;
+        const distFromCenter = Math.hypot(myPlayer.x - z.x, myPlayer.y - z.y);
+        const isOutsideZone = distFromCenter > z.currentRadius;
+
+        if (isOutsideZone) {
+          // Intense red toxic gas flashing around player
+          const pulse = (Math.sin(Date.now() / 150) + 1) / 2;
+          const gasGrad = ctx.createRadialGradient(width / 2, height / 2, width * 0.25, width / 2, height / 2, width * 0.72);
+          gasGrad.addColorStop(0, 'rgba(239, 68, 68, 0.08)');
+          gasGrad.addColorStop(0.7, `rgba(220, 38, 38, ${0.35 + pulse * 0.25})`);
+          gasGrad.addColorStop(1, `rgba(185, 28, 28, ${0.55 + pulse * 0.3})`);
+          ctx.fillStyle = gasGrad;
+          ctx.fillRect(0, 0, width, height);
+        } else if (z.isShrinking) {
+          // Pulsing warning border when zone is actively shrinking
+          const pulse = (Math.sin(Date.now() / 250) + 1) / 2;
+          ctx.save();
+          ctx.strokeStyle = `rgba(245, 158, 11, ${0.25 + pulse * 0.35})`;
+          ctx.lineWidth = 14;
+          ctx.strokeRect(0, 0, width, height);
+          ctx.restore();
+        }
       }
 
       // 11. Floating Tactical Minimap (HUD overlay on top right)
@@ -703,8 +733,8 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       ctx.strokeRect(miniX, miniY, miniSize, miniSize);
 
       // Minimap Ponds
-      if (Array.isArray(state?.ponds)) {
-        state.ponds.forEach(pond => {
+      if (Array.isArray(curState?.ponds)) {
+        curState.ponds.forEach(pond => {
           ctx.beginPath();
           ctx.arc(miniX + pond.x * miniScale, miniY + pond.y * miniScale, Math.max(2, pond.radius * miniScale), 0, Math.PI * 2);
           ctx.fillStyle = '#0284c7';
@@ -712,9 +742,9 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         });
       }
 
-      // Minimap Buildings / Compounds
-      if (Array.isArray(state?.obstacles)) {
-        state.obstacles.forEach(ob => {
+      // Minimap Buildings / Containers
+      if (Array.isArray(curState?.obstacles)) {
+        curState.obstacles.forEach(ob => {
           if (ob.type === 'wall' || ob.type === 'container') {
             ctx.fillStyle = ob.type === 'container' ? '#f59e0b' : '#64748b';
             ctx.fillRect(miniX + ob.x * miniScale, miniY + ob.y * miniScale, Math.max(1, ob.w * miniScale), Math.max(1, ob.h * miniScale));
@@ -722,23 +752,35 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         });
       }
 
-      // Minimap Safe Zone
-      if (state?.mode === 'battle_royale' && state?.zone) {
-        const z = state.zone;
+      // Minimap Safe Zone & Target
+      if (curState?.mode === 'battle_royale' && curState?.zone) {
+        const z = curState.zone;
+        if (z.targetRadius && z.targetRadius < z.currentRadius) {
+          ctx.beginPath();
+          ctx.setLineDash([4, 4]);
+          ctx.arc(miniX + z.x * miniScale, miniY + z.y * miniScale, z.targetRadius * miniScale, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
         ctx.beginPath();
         ctx.arc(miniX + z.x * miniScale, miniY + z.y * miniScale, z.currentRadius * miniScale, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = z.isShrinking ? '#f59e0b' : '#ffffff';
+        ctx.lineWidth = 2;
         ctx.stroke();
       }
 
       // Minimap Players
-      if (Array.isArray(state?.players)) {
-        state.players.forEach(p => {
+      if (Array.isArray(curState?.players)) {
+        curState.players.forEach(p => {
           if (!p.isAlive) return;
-          const isSelf = p.id === myPlayerId;
+          const isSelf = p.id === curMyPlayerId;
+          const px = isSelf && localPredictedRef.current.initialized ? localPredictedRef.current.x : p.x;
+          const py = isSelf && localPredictedRef.current.initialized ? localPredictedRef.current.y : p.y;
           ctx.beginPath();
-          ctx.arc(miniX + p.x * miniScale, miniY + p.y * miniScale, isSelf ? 4.5 : 2.5, 0, Math.PI * 2);
+          ctx.arc(miniX + px * miniScale, miniY + py * miniScale, isSelf ? 4.5 : 2.5, 0, Math.PI * 2);
           ctx.fillStyle = isSelf ? '#38bdf8' : '#ef4444';
           ctx.fill();
         });
@@ -755,7 +797,7 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
       running = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [state, myPlayerId]);
+  }, []); // Run continuous animation loop once on mount!
 
   // Dynamic canvas resizing
   useEffect(() => {
