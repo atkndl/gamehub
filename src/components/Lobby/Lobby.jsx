@@ -138,12 +138,30 @@ export default function Lobby() {
                 </p>
 
                 {/* Settings Pill */}
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 font-semibold mb-4 flex items-center justify-between">
-                  <span>{wordleConfig.wordCount} Kelime</span>
-                  <span className="text-slate-300">•</span>
-                  <span>{wordleConfig.mode === 'speed' ? '⚡ Hız' : '🎯 Puan'}</span>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-slate-500">{wordleConfig.wordPool === 'common' ? 'Standart' : 'Geniş'}</span>
+                <div className={`p-2.5 rounded-xl border text-xs font-semibold mb-4 flex items-center justify-between ${
+                  wordleConfig.isTroubleMode
+                    ? 'bg-purple-50 border-purple-200 text-purple-900'
+                    : 'bg-slate-50 border-slate-100 text-slate-700'
+                }`}>
+                  {wordleConfig.isTroubleMode ? (
+                    <>
+                      <span className="font-bold flex items-center gap-1 text-purple-800">
+                        <span>🔥</span> Trouble Modu
+                      </span>
+                      <span className="text-purple-300">•</span>
+                      <span>5 Kelime</span>
+                      <span className="text-purple-300">•</span>
+                      <span>{wordleConfig.mode === 'speed' ? '⚡ Hız' : '🎯 Puan'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{wordleConfig.wordCount} Kelime</span>
+                      <span className="text-slate-300">•</span>
+                      <span>{wordleConfig.mode === 'speed' ? '⚡ Hız' : '🎯 Puan'}</span>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-slate-500">{wordleConfig.wordPool === 'common' ? 'Standart' : 'Geniş'}</span>
+                    </>
+                  )}
                 </div>
               </div>
 

@@ -264,6 +264,28 @@ export function GameProvider({ children }) {
     });
   }, [showToast]);
 
+  const troubleRefreshPool = useCallback((keptWords = []) => {
+    return new Promise((resolve) => {
+      socket.emit('trouble_refresh_pool', { keptWords }, (res) => {
+        if (!res.success && res.error) {
+          showToast(res.error);
+        }
+        resolve(res);
+      });
+    });
+  }, [showToast]);
+
+  const troubleConfirmSelection = useCallback((selectedWords) => {
+    return new Promise((resolve) => {
+      socket.emit('trouble_confirm_selection', { selectedWords }, (res) => {
+        if (!res.success && res.error) {
+          showToast(res.error);
+        }
+        resolve(res);
+      });
+    });
+  }, [showToast]);
+
   const submitGuess = useCallback((guess) => {
     return new Promise((resolve) => {
       socket.emit('wordle_guess', { guess }, (res) => {
@@ -382,6 +404,8 @@ export function GameProvider({ children }) {
         updateProfile,
         updateWordleConfig,
         startWordle,
+        troubleRefreshPool,
+        troubleConfirmSelection,
         submitGuess,
         sendChat,
         rematch,

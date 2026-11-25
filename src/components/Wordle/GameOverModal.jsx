@@ -28,6 +28,7 @@ export default function GameOverModal({ data }) {
 
   const isHost = player?.isHost;
   const room = data.room;
+  const isTrouble = Boolean(data.isTroubleMode || room?.wordleSession?.isTroubleMode);
   const isSpeedMode = data.mode === 'speed' || room?.wordleSession?.mode === 'speed';
   const words = data.words || room?.wordleSession?.words || [];
   const wordDetails = data.wordDetails || room?.wordleSession?.wordDetails || {};
@@ -76,9 +77,16 @@ export default function GameOverModal({ data }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-md animate-fade-in overflow-y-auto">
       <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col p-5 sm:p-7 text-center my-auto max-h-[95vh] overflow-y-auto">
         {/* Top celebratory pill */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-900 text-xs font-black uppercase tracking-wider mx-auto mb-2 border border-amber-200/80 shadow-xs">
-          <Sparkles className="w-4 h-4 text-amber-600 animate-pulse" />
-          <span>Oyun Bitti • Liderlik Tablosu</span>
+        <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-900 text-xs font-black uppercase tracking-wider border border-amber-200/80 shadow-xs">
+            <Sparkles className="w-4 h-4 text-amber-600 animate-pulse" />
+            <span>Oyun Bitti • Liderlik Tablosu</span>
+          </div>
+          {isTrouble && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100 text-purple-900 text-xs font-black uppercase tracking-wider border border-purple-200 shadow-xs">
+              <span>🔥 Trouble Modu</span>
+            </div>
+          )}
         </div>
 
         {/* Winner Callout */}

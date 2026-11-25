@@ -86,6 +86,11 @@ export default function RoundSummaryModal({ summary }) {
                 <span className="font-bold text-slate-800 truncate max-w-[120px]">
                   {p.name}
                 </span>
+                {summary.isTroubleMode && p.playerTargetWord && (
+                  <span className="text-[10px] font-mono font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                    {toTurkishUpper(p.playerTargetWord)}
+                  </span>
+                )}
               </div>
 
               <div className="text-right">

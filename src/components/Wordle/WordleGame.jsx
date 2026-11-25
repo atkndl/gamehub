@@ -5,10 +5,11 @@ import WordleKeyboard from './WordleKeyboard';
 import OpponentTracker from './OpponentTracker';
 import RoundSummaryModal from './RoundSummaryModal';
 import GameOverModal from './GameOverModal';
+import TroubleSelectionScreen from './TroubleSelectionScreen';
 import LiveChat from '../Common/LiveChat';
 import { sound } from '../../utils/sounds';
 import { toTurkishUpper, toTurkishLower } from '../../utils/turkish';
-import { Zap, Target, HelpCircle, AlertCircle, CheckCircle2, Clock, MessageCircle, Users } from 'lucide-react';
+import { Zap, Target, HelpCircle, AlertCircle, CheckCircle2, Clock, MessageCircle, Users, Flame } from 'lucide-react';
 
 export default function WordleGame() {
   const {
@@ -21,6 +22,11 @@ export default function WordleGame() {
     showToast,
     chatMessages
   } = useGame();
+
+  // If room is in trouble selection phase, render TroubleSelectionScreen
+  if (room?.gameState === 'trouble_selection' || (room?.troubleSession && !room?.wordleSession)) {
+    return <TroubleSelectionScreen />;
+  }
 
   const session = room?.wordleSession;
   const isSpeedMode = session?.mode === 'speed';
@@ -205,7 +211,14 @@ export default function WordleGame() {
       {/* Game Header Bar */}
       <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4 border border-slate-200/80 shadow-xs mb-3 flex items-center justify-between">
         {/* Left: Mode and Word Index */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {session?.isTroubleMode && (
+            <div className="px-2.5 py-1 rounded-xl text-xs font-heading font-black flex items-center gap-1.5 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-900 border border-purple-300 shadow-2xs">
+              <Flame className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+              <span>Trouble Modu</span>
+            </div>
+          )}
+
           <div
             className={`px-2.5 py-1 rounded-xl text-xs font-heading font-black flex items-center gap-1.5 ${
               isSpeedMode
@@ -278,6 +291,14 @@ export default function WordleGame() {
             activeTab !== 'board' ? 'hidden lg:flex' : 'flex'
           }`}
         >
+          {/* Trouble Mode Source Info Banner */}
+          {session?.isTroubleMode && session?.troubleAssignments?.[player?.id] && (
+            <div className="w-full max-w-sm py-1.5 px-3 rounded-xl bg-purple-50 border border-purple-200/80 text-purple-900 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs">
+              <span className="text-base">{session.troubleAssignments[player.id].sourceAvatar}</span>
+              <span>Bu kelimeleri senin için <strong>{session.troubleAssignments[player.id].sourceName}</strong> seçti! 😈</span>
+            </div>
+          )}
+
           {/* Status Alert Banner */}
           {wordFeedback && (
             <div className="w-full max-w-sm text-center py-2 px-4 rounded-xl font-heading font-black text-xs sm:text-sm shadow-xs transition-all animate-pop bg-emerald-100 text-emerald-800 border border-emerald-300">

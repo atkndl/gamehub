@@ -27,7 +27,9 @@ import {
   updateSurvivalConfig,
   startSurvivalGame,
   handleSurvivalInput,
-  restartSurvivalGame
+  restartSurvivalGame,
+  handleTroubleRefreshPool,
+  handleTroubleConfirmSelection
 } from './roomManager.js';
 import { SNAKE_CLASSES } from './snakeLogic.js';
 import { WEAPONS, SCOPES, ARMORS, HELMETS } from './survivalLogic.js';
@@ -87,16 +89,26 @@ const activeTimers = new Map();
  */
 async function emitGameOver(room, leaderboard, mode) {
   room.gameState = 'game_over';
-  const words = room.wordleSession?.words || [];
+  let words = room.wordleSession?.words || [];
+  if (room.wordleSession?.isTroubleMode && room.wordleSession?.playerWords) {
+    const allWords = new Set();
+    Object.values(room.wordleSession.playerWords).forEach(list => {
+      (list || []).forEach(w => allWords.add(w));
+    });
+    words = Array.from(allWords);
+  }
+
   const wordDetails = await getWordsDetailsMap(words);
-  console.log(`[Game Over Broadcast] Room ${room.code}, Mode: ${mode}, Words:`, words);
+  console.log(`[Game Over Broadcast] Room ${room.code}, Mode: ${mode}, Trouble: ${Boolean(room.wordleSession?.isTroubleMode)}, Words:`, words);
   io.to(room.code).emit('game_over', {
     room,
     leaderboard,
     playerProgress: room.wordleSession?.playerProgress || {},
     words,
     wordDetails,
-    mode
+    mode,
+    isTroubleMode: Boolean(room.wordleSession?.isTroubleMode),
+    playerWords: room.wordleSession?.playerWords || null
   });
 }
 
@@ -262,9 +274,49 @@ io.on('connection', (socket) => {
       return;
     }
     const room = result.room;
-    console.log(`[Wordle Started] Room ${room.code}`);
+    console.log(`[Wordle Started] Room ${room.code}, State: ${room.gameState}`);
     io.to(room.code).emit('game_started', room);
-    if (typeof callback === 'function') callback({ success: true });
+    if (typeof callback === 'function') callback({ success: true, room });
+  });
+
+  // Trouble Mode: Refresh Unselected Words Pool
+  socket.on('trouble_refresh_pool', ({ keptWords }, callback) => {
+    const result = handleTroubleRefreshPool(socket.id, keptWords);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    if (typeof callback === 'function') {
+      callback({ success: true, pool: result.pool, keptWords: result.keptWords });
+    }
+    io.to(result.room.code).emit('room_updated', result.room);
+  });
+
+  // Trouble Mode: Confirm 5 Selected Words
+  socket.on('trouble_confirm_selection', ({ selectedWords }, callback) => {
+    const result = handleTroubleConfirmSelection(socket.id, selectedWords);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+
+    if (typeof callback === 'function') {
+      callback({
+        success: true,
+        allConfirmed: result.allConfirmed,
+        confirmedCount: result.confirmedCount,
+        totalPlayers: result.totalPlayers
+      });
+    }
+
+    if (result.allConfirmed) {
+      // All confirmed! Wordle match starts now
+      console.log(`[Trouble Selection Complete] Room ${result.room.code} starting match!`);
+      io.to(result.room.code).emit('game_started', result.room);
+    } else {
+      // Broadcast confirmation progress to all room players
+      io.to(result.room.code).emit('room_updated', result.room);
+    }
   });
 
   // Wordle Guess
@@ -309,8 +361,18 @@ io.on('connection', (socket) => {
       // Handle Score Mode Round Finished (all players completed current word)
       if (room.wordleSession.mode === 'score' && result.roundFinishedAll) {
         const session = room.wordleSession;
+        const isTrouble = Boolean(session.isTroubleMode && session.playerWords);
         const currentTargetWord = session.words[session.roundIndex];
         const currentWordTdk = await getWordDetails(currentTargetWord);
+
+        // Fetch details for player specific words if trouble mode
+        const playerWordDetails = {};
+        if (isTrouble) {
+          for (const pid of Object.keys(session.playerWords)) {
+            const w = session.playerWords[pid]?.[session.roundIndex];
+            if (w) playerWordDetails[w] = await getWordDetails(w);
+          }
+        }
 
         // Rank players for this round
         const roundRankings = Object.values(session.playerProgress).map(p => ({
@@ -320,7 +382,8 @@ io.on('connection', (socket) => {
           isSolved: p.isCurrentWordSolved,
           guessesCount: p.guesses.length,
           roundPoints: p.roundPoints[session.roundIndex] || 0,
-          totalScore: p.totalScore
+          totalScore: p.totalScore,
+          playerTargetWord: isTrouble ? session.playerWords[p.playerId]?.[session.roundIndex] : currentTargetWord
         })).sort((a, b) => b.roundPoints - a.roundPoints);
 
         const summary = {
@@ -328,6 +391,8 @@ io.on('connection', (socket) => {
           wordCount: session.wordCount,
           targetWord: currentTargetWord,
           wordDetail: currentWordTdk,
+          playerWordDetails,
+          isTroubleMode: isTrouble,
           rankings: roundRankings,
           isFinalRound: session.roundIndex + 1 >= session.wordCount,
           nextRoundIn: 5 // seconds countdown

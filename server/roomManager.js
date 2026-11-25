@@ -87,6 +87,40 @@ export function pickRandomWords(count, pool = 'common') {
   return picked;
 }
 
+/**
+ * Pick unique disjoint random words that are not in excludeSet.
+ * Mutates excludeSet by adding picked words so subsequent calls remain disjoint.
+ */
+export function pickDisjointWords(count, pool = 'common', excludeSet = new Set()) {
+  const source = (pool === 'all' && allTdkWordsList.length > 0) ? allTdkWordsList : targetWordsList;
+  const picked = [];
+  let attempts = 0;
+  const maxAttempts = count * 200;
+
+  while (picked.length < count && attempts < maxAttempts) {
+    attempts++;
+    const idx = Math.floor(Math.random() * source.length);
+    const word = source[idx];
+    if (!excludeSet.has(word)) {
+      excludeSet.add(word);
+      picked.push(word);
+    }
+  }
+
+  // Fallback in case random attempts miss
+  if (picked.length < count) {
+    for (const w of source) {
+      if (!excludeSet.has(w)) {
+        excludeSet.add(w);
+        picked.push(w);
+        if (picked.length >= count) break;
+      }
+    }
+  }
+
+  return picked;
+}
+
 // In-memory store for active rooms
 const rooms = new Map();
 // Socket ID to room code mapping
@@ -130,9 +164,11 @@ export function createRoom(socketId, playerName, avatar) {
       wordCount: 5,
       mode: 'speed', // 'speed' | 'score'
       scoringType: 'speed', // 'speed' | 'guesses'
-      wordPool: 'common' // 'common' | 'all'
+      wordPool: 'common', // 'common' | 'all'
+      isTroubleMode: false
     },
     wordleSession: null,
+    troubleSession: null,
     snakeConfig: {
       hazardFrequency: 'normal'
     },
@@ -264,6 +300,48 @@ export function startWordleGame(socketId) {
   if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu başlatabilir.' };
 
   const config = room.wordleConfig;
+
+  // Trouble Mode Check
+  if (config.isTroubleMode) {
+    if (room.players.length < 2) {
+      return { error: 'Trouble (Meydan Okuma) Modu en az 2 oyuncu gerektirir!' };
+    }
+
+    const N = room.players.length;
+    const assignments = {};
+    room.players.forEach((p, i) => {
+      const targetP = room.players[(i + 1) % N];
+      const sourceP = room.players[(i - 1 + N) % N];
+      assignments[p.id] = {
+        targetId: targetP.id,
+        targetName: targetP.name,
+        targetAvatar: targetP.avatar,
+        sourceId: sourceP.id,
+        sourceName: sourceP.name,
+        sourceAvatar: sourceP.avatar
+      };
+    });
+
+    const usedWordsSet = new Set();
+    const pools = {};
+    room.players.forEach(p => {
+      pools[p.id] = pickDisjointWords(20, config.wordPool, usedWordsSet);
+    });
+
+    room.gameState = 'trouble_selection';
+    room.troubleSession = {
+      assignments,
+      pools,
+      selectedWords: {}, // { [playerId]: [5 words] }
+      confirmedPlayers: {}, // { [playerId]: true }
+      usedWordsSet,
+      config: { ...config }
+    };
+
+    console.log(`[Trouble Selection Started] Room ${room.code}, Players: ${N}`);
+    return { room, troubleSelection: true };
+  }
+
   const wordCount = [1, 3, 5, 10].includes(Number(config.wordCount)) ? Number(config.wordCount) : 5;
   const targetWords = pickRandomWords(wordCount, config.wordPool);
 
@@ -291,6 +369,7 @@ export function startWordleGame(socketId) {
   });
 
   room.gameState = 'playing';
+  room.troubleSession = null;
   room.wordleSession = {
     words: targetWords,
     wordCount,
@@ -305,6 +384,131 @@ export function startWordleGame(socketId) {
   };
 
   return { room };
+}
+
+/**
+ * Handle Trouble Mode pool refresh for unselected words
+ */
+export function handleTroubleRefreshPool(socketId, keptWords = []) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'trouble_selection' || !room.troubleSession) {
+    return { error: 'Aktif bir Trouble kelime seçimi bulunamadı.' };
+  }
+
+  const session = room.troubleSession;
+  const currentPool = session.pools[socketId] || [];
+
+  // Filter kept words to those actually in player's current pool (max 5)
+  const validKept = (Array.isArray(keptWords) ? keptWords : [])
+    .filter(w => currentPool.includes(w))
+    .slice(0, 5);
+
+  const countNeeded = Math.max(0, 20 - validKept.length);
+  const newWords = pickDisjointWords(countNeeded, session.config?.wordPool || 'common', session.usedWordsSet);
+  const newPool = [...validKept, ...newWords];
+
+  session.pools[socketId] = newPool;
+
+  return { success: true, pool: newPool, keptWords: validKept, room };
+}
+
+/**
+ * Handle Trouble Mode player 5-word confirmation
+ */
+export function handleTroubleConfirmSelection(socketId, selectedWords = []) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'trouble_selection' || !room.troubleSession) {
+    return { error: 'Aktif bir Trouble seçimi bulunamadı.' };
+  }
+
+  if (!Array.isArray(selectedWords) || selectedWords.length !== 5) {
+    return { error: 'Tam olarak 5 kelime seçmelisiniz.' };
+  }
+
+  const session = room.troubleSession;
+  const pool = session.pools[socketId] || [];
+  const normalizedPool = pool.map(w => toTurkishLower(w));
+  const normalizedSelected = selectedWords.map(w => toTurkishLower(w));
+
+  const allInPool = normalizedSelected.every(w => normalizedPool.includes(w));
+  if (!allInPool) {
+    return { error: 'Seçilen kelimeler havuzunuzda bulunamadı.' };
+  }
+
+  session.selectedWords[socketId] = normalizedSelected;
+  session.confirmedPlayers[socketId] = true;
+
+  const totalPlayers = room.players.length;
+  const confirmedCount = Object.keys(session.confirmedPlayers).length;
+  const allConfirmed = room.players.every(p => session.confirmedPlayers[p.id]);
+
+  if (!allConfirmed) {
+    return {
+      success: true,
+      allConfirmed: false,
+      confirmedCount,
+      totalPlayers,
+      confirmedPlayers: session.confirmedPlayers,
+      room
+    };
+  }
+
+  // All players confirmed! Assign words in a ring:
+  // Player P receives words chosen for them by their sourceId
+  const playerWords = {};
+  room.players.forEach(p => {
+    const sourceId = session.assignments[p.id].sourceId;
+    playerWords[p.id] = session.selectedWords[sourceId] || [];
+  });
+
+  const config = session.config;
+  const playerProgress = {};
+  room.players.forEach(p => {
+    p.score = 0;
+    playerProgress[p.id] = {
+      playerId: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      currentWordIndex: 0,
+      guesses: [],
+      solvedWordsCount: 0,
+      isCurrentWordSolved: false,
+      isCurrentWordFailed: false,
+      isGameFinished: false,
+      finishRank: null,
+      finishTime: null,
+      roundPoints: [],
+      totalScore: 0,
+      lastGuessTime: Date.now()
+    };
+  });
+
+  room.gameState = 'playing';
+  room.wordleSession = {
+    words: playerWords[room.hostId] || [], // fallback
+    playerWords,
+    wordCount: 5,
+    mode: config.mode, // 'speed' | 'score'
+    scoringType: config.scoringType, // 'speed' | 'guesses'
+    isTroubleMode: true,
+    troubleAssignments: session.assignments,
+    startTime: Date.now(),
+    roundIndex: 0,
+    roundStartTime: Date.now(),
+    playerProgress,
+    finishedCount: 0,
+    roundSummary: null
+  };
+
+  console.log(`[Trouble Match Started] Room: ${room.code}, playerWords:`, playerWords);
+
+  return {
+    success: true,
+    allConfirmed: true,
+    confirmedCount: totalPlayers,
+    totalPlayers,
+    room
+  };
 }
 
 /**
@@ -341,7 +545,9 @@ export function handleWordleGuess(socketId, guessWord) {
 
   // Which word is this player currently on?
   const wordIndex = session.mode === 'speed' ? progress.currentWordIndex : session.roundIndex;
-  const targetWord = session.words[wordIndex];
+  const targetWord = (session.playerWords && session.playerWords[socketId])
+    ? session.playerWords[socketId][wordIndex]
+    : session.words[wordIndex];
 
   // Evaluate guess
   const result = evaluateWordleGuess(targetWord, cleanGuess);
@@ -570,6 +776,7 @@ export function returnToLobby(socketId) {
 
   room.gameState = 'lobby';
   room.wordleSession = null;
+  room.troubleSession = null;
   room.snakeSession = null;
   room.survivalSession = null;
   room.players.forEach(p => {
