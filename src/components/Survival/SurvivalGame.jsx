@@ -92,15 +92,27 @@ export default function SurvivalGame() {
     } else if (code === 'KeyF' || code === 'KeyE' || key === 'f' || key === 'e') {
       e.preventDefault();
       sendInputWithAction({ action: 'pickup' });
-    } else if (code === 'Digit7' || code === 'Numpad7' || key === '7') {
+    } else if (code === 'Digit4' || code === 'Numpad4' || key === '4' || code === 'Digit7' || code === 'Numpad7' || key === '7') {
       e.preventDefault();
       sendInputWithAction({ action: 'use_heal', healType: 'bandage' });
-    } else if (code === 'Digit8' || code === 'Numpad8' || key === '8') {
+    } else if (code === 'Digit5' || code === 'Numpad5' || key === '5' || code === 'Digit8' || code === 'Numpad8' || key === '8') {
       e.preventDefault();
       sendInputWithAction({ action: 'use_heal', healType: 'medkit' });
-    } else if (code === 'Digit9' || code === 'Numpad9' || key === '9') {
+    } else if (code === 'Digit6' || code === 'Numpad6' || key === '6' || code === 'Digit9' || code === 'Numpad9' || key === '9') {
       e.preventDefault();
       sendInputWithAction({ action: 'use_heal', healType: 'soda' });
+    } else if (code === 'KeyH' || key === 'h') {
+      e.preventDefault();
+      const myPlayer = survivalState?.players?.find(p => p.id === player?.id);
+      if (myPlayer) {
+        if (myPlayer.hp < 100 && (myPlayer.heals?.medkit || 0) > 0) {
+          sendInputWithAction({ action: 'use_heal', healType: 'medkit' });
+        } else if (myPlayer.hp < 75 && (myPlayer.heals?.bandage || 0) > 0) {
+          sendInputWithAction({ action: 'use_heal', healType: 'bandage' });
+        } else if ((myPlayer.heals?.soda || 0) > 0) {
+          sendInputWithAction({ action: 'use_heal', healType: 'soda' });
+        }
+      }
     }
   }, [sendInputWithAction, syncInput]);
 

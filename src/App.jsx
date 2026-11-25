@@ -7,16 +7,23 @@ import WordleGame from './components/Wordle/WordleGame';
 import SnakeGame from './components/Snake/SnakeGame';
 import SurvivalGame from './components/Survival/SurvivalGame';
 
+// Synchronously parse room code from URL before components mount
+try {
+  const params = new URLSearchParams(window.location.search);
+  const roomFromUrl = params.get('oda') || params.get('room');
+  if (roomFromUrl) {
+    window.__initialRoomCode = roomFromUrl.toUpperCase().trim();
+  }
+} catch (e) {}
+
 function GameHubApp() {
   const { room, toastMessage } = useGame();
 
-  // Check URL query parameters for ?oda=CODE on load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomFromUrl = params.get('oda') || params.get('room');
     if (roomFromUrl && !room) {
-      // You can store this or pass down to Home if needed
-      window.__initialRoomCode = roomFromUrl.toUpperCase();
+      window.__initialRoomCode = roomFromUrl.toUpperCase().trim();
     }
   }, [room]);
 

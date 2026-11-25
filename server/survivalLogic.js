@@ -128,10 +128,10 @@ export const WEAPONS = {
 };
 
 export const SCOPES = {
-  '1x': { id: '1x', name: '1x Görüş', zoom: 1.0, fov: 900 },
-  '2x': { id: '2x', name: '2x Dürbün', zoom: 0.75, fov: 1350 },
-  '4x': { id: '4x', name: '4x Dürbün', zoom: 0.52, fov: 1950 },
-  '8x': { id: '8x', name: '8x Dürbün', zoom: 0.35, fov: 2900 }
+  '1x': { id: '1x', name: '1x Görüş', zoom: 1.65, fov: 900 },
+  '2x': { id: '2x', name: '2x Dürbün', zoom: 1.35, fov: 1350 },
+  '4x': { id: '4x', name: '4x Dürbün', zoom: 1.05, fov: 1950 },
+  '8x': { id: '8x', name: '8x Dürbün', zoom: 0.80, fov: 2900 }
 };
 
 export const ARMORS = {
@@ -273,9 +273,9 @@ export class SurvivalSession {
           '556': 90
         },
         heals: {
-          bandage: 4,
-          medkit: 1,
-          soda: 2
+          bandage: 0,
+          medkit: 0,
+          soda: 0
         },
         kills: 0,
         damageDealt: 0,
@@ -651,14 +651,17 @@ export class SurvivalSession {
     if (type === 'bandage') {
       if (p.hp >= 75 || p.heals.bandage <= 0) return;
       p.healingItem = 'bandage';
+      p.healingTotal = 2000;
       p.healingUntil = Date.now() + 2000;
     } else if (type === 'medkit') {
       if (p.hp >= 100 || p.heals.medkit <= 0) return;
       p.healingItem = 'medkit';
+      p.healingTotal = 4500;
       p.healingUntil = Date.now() + 4500;
     } else if (type === 'soda') {
       if (p.boost >= 100 || p.heals.soda <= 0) return;
       p.healingItem = 'soda';
+      p.healingTotal = 2000;
       p.healingUntil = Date.now() + 2000;
     }
   }
@@ -750,7 +753,7 @@ export class SurvivalSession {
         continue;
       }
 
-      // Check if player is wading in a water pond (slight 20% slowdown)
+      // Check if player is wading in a water pond (slight slowdown & lingering wetness)
       let inWater = false;
       for (const pond of this.ponds) {
         if (distance(p.x, p.y, pond.x, pond.y) < pond.radius) {
@@ -759,7 +762,15 @@ export class SurvivalSession {
         }
       }
 
-      let speedMultiplier = inWater ? 0.8 : 1.0;
+      if (inWater) {
+        p.wetUntil = now + 3500; // Lingering wetness for 3.5 seconds after exiting water
+      }
+      const isWet = inWater || Boolean(p.wetUntil && now < p.wetUntil);
+      p.inWater = inWater;
+      p.isWet = isWet;
+
+      // Deep water: 30% slow; Lingering wetness: 18% slow
+      let speedMultiplier = inWater ? 0.70 : (isWet ? 0.82 : 1.0);
       if (p.boost > 0) {
         speedMultiplier += (p.boost / 100) * 0.3; // up to +30% boost speed
         p.boost = Math.max(0, p.boost - 0.08);
@@ -1159,7 +1170,11 @@ export class SurvivalSession {
         lastMeleePunchHand: p.lastMeleePunchHand,
         isInvulnerable: Date.now() < p.invulnerableUntil,
         isRespawning: Boolean(p.respawnAt),
-        healingItem: p.healingItem
+        healingItem: p.healingItem,
+        healingUntil: p.healingUntil,
+        healingTotal: p.healingTotal || 0,
+        isWet: Boolean(p.isWet),
+        inWater: Boolean(p.inWater)
       })),
       isGameOver: this.isGameOver
     };

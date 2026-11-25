@@ -4,6 +4,10 @@ import { SCOPES, WEAPONS } from '../../../server/survivalLogic';
 export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onStopShoot }) {
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
+  const smoothCamRef = useRef({ x: 2100, y: 2100 });
+  const interpPlayersRef = useRef({});
+  const prevHpRef = useRef(null);
+  const damageFlashRef = useRef(0);
 
   // Handle Mouse Aiming & Shooting
   useEffect(() => {
@@ -69,8 +73,23 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
 
       // Find my player
       const myPlayer = state?.players?.find(p => p.id === myPlayerId);
-      const camX = myPlayer ? myPlayer.x : 2100;
-      const camY = myPlayer ? myPlayer.y : 2100;
+      const targetCamX = myPlayer ? myPlayer.x : 2100;
+      const targetCamY = myPlayer ? myPlayer.y : 2100;
+
+      // Smooth camera interpolation towards target (eliminates 25Hz server tick stutter)
+      smoothCamRef.current.x += (targetCamX - smoothCamRef.current.x) * 0.28;
+      smoothCamRef.current.y += (targetCamY - smoothCamRef.current.y) * 0.28;
+      const camX = smoothCamRef.current.x;
+      const camY = smoothCamRef.current.y;
+
+      // Detect damage taken for full-screen red flash
+      if (myPlayer) {
+        if (prevHpRef.current !== null && myPlayer.hp < prevHpRef.current - 0.5) {
+          const lost = prevHpRef.current - myPlayer.hp;
+          damageFlashRef.current = Math.min(0.70, 0.30 + lost * 0.02);
+        }
+        prevHpRef.current = myPlayer.hp;
+      }
 
       // Determine camera zoom based on equipped scope
       const scopeKey = myPlayer?.scope || '1x';
@@ -401,14 +420,31 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
         state.players.forEach(p => {
           if (!p.isAlive) return;
 
+          let interp = interpPlayersRef.current[p.id];
+          if (!interp) {
+            interp = { x: p.x, y: p.y, angle: p.angle || 0 };
+            interpPlayersRef.current[p.id] = interp;
+          } else {
+            interp.x += (p.x - interp.x) * 0.35;
+            interp.y += (p.y - interp.y) * 0.35;
+            let diff = (p.angle || 0) - interp.angle;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            interp.angle += diff * 0.35;
+          }
+
+          const renderX = interp.x;
+          const renderY = interp.y;
+          const renderAngle = interp.angle;
+
           const isSelf = p.id === myPlayerId;
 
           // Check if player is concealed in a bush
           let insideBush = false;
           if (Array.isArray(state?.bushes)) {
             for (const bush of state.bushes) {
-              const dx = p.x - bush.x;
-              const dy = p.y - bush.y;
+              const dx = renderX - bush.x;
+              const dy = renderY - bush.y;
               if (dx * dx + dy * dy < bush.radius * bush.radius) {
                 insideBush = true;
                 break;
@@ -423,8 +459,8 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
           }
 
           ctx.save();
-          ctx.translate(p.x, p.y);
-          ctx.rotate(p.angle || 0);
+          ctx.translate(renderX, renderY);
+          ctx.rotate(renderAngle);
 
           if (insideBush && isSelf) {
             ctx.globalAlpha = 0.55; // Semi-transparent to indicate camouflage
@@ -608,6 +644,48 @@ export default function SurvivalCanvas({ state, myPlayerId, onAim, onShoot, onSt
 
       // Restore camera transform
       ctx.restore();
+
+      // --- FULL-SCREEN OVERLAYS (Wet Vignette & Damage Red Flash) ---
+      // 1. Wet Vignette & Water Droplets (when wading or soaked)
+      if (myPlayer?.isWet) {
+        const wetAlpha = myPlayer.inWater ? 0.38 : 0.22;
+        const wetGrad = ctx.createRadialGradient(width / 2, height / 2, width * 0.32, width / 2, height / 2, width * 0.72);
+        wetGrad.addColorStop(0, 'rgba(2, 132, 199, 0)');
+        wetGrad.addColorStop(0.8, `rgba(2, 132, 199, ${wetAlpha * 0.6})`);
+        wetGrad.addColorStop(1, `rgba(14, 165, 233, ${wetAlpha})`);
+        ctx.fillStyle = wetGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        // Water droplet highlights on screen corners
+        ctx.save();
+        ctx.fillStyle = 'rgba(224, 242, 254, 0.28)';
+        const t = Date.now() / 350;
+        const dropletPositions = [
+          { x: 35 + Math.sin(t) * 8, y: 45 + Math.cos(t) * 6, r: 7 },
+          { x: width - 40 + Math.sin(t + 1) * 8, y: 55 + Math.cos(t + 1) * 8, r: 9 },
+          { x: 50 + Math.sin(t + 2) * 10, y: height - 50 + Math.cos(t + 2) * 7, r: 8 },
+          { x: width - 45 + Math.sin(t + 3) * 8, y: height - 45 + Math.cos(t + 3) * 10, r: 9 }
+        ];
+        dropletPositions.forEach(d => {
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.restore();
+      }
+
+      // 2. Full-Screen Red Damage Flash Vignette
+      if (damageFlashRef.current > 0.01) {
+        const dmgGrad = ctx.createRadialGradient(width / 2, height / 2, width * 0.2, width / 2, height / 2, width * 0.75);
+        dmgGrad.addColorStop(0, 'rgba(239, 68, 68, 0)');
+        dmgGrad.addColorStop(0.7, `rgba(220, 38, 38, ${damageFlashRef.current * 0.5})`);
+        dmgGrad.addColorStop(1, `rgba(185, 28, 28, ${damageFlashRef.current})`);
+        ctx.fillStyle = dmgGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        // Smooth decay per frame
+        damageFlashRef.current = Math.max(0, damageFlashRef.current - 0.022);
+      }
 
       // 11. Floating Tactical Minimap (HUD overlay on top right)
       const miniSize = 140;

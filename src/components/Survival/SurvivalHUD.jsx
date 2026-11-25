@@ -95,17 +95,46 @@ export default function SurvivalHUD({
         </div>
       )}
 
+      {/* HEALING PROGRESS CHANNEL NOTIFICATION */}
+      {isAlive && myPlayer.healingItem && (
+        <div className="self-center px-6 py-3.5 rounded-2xl bg-emerald-950/90 border border-emerald-500/70 backdrop-blur-md text-center shadow-2xl animate-fade-in pointer-events-none">
+          <div className="flex items-center justify-center gap-2 text-emerald-400 font-heading font-black text-sm mb-1.5">
+            <span className="text-lg">
+              {myPlayer.healingItem === 'bandage' ? '🩹' : myPlayer.healingItem === 'medkit' ? '🧰' : '🥤'}
+            </span>
+            <span>
+              {myPlayer.healingItem === 'bandage'
+                ? 'Sargı Bezi Sarılıyor...'
+                : myPlayer.healingItem === 'medkit'
+                ? 'İlk Yardım Çantası Kullanılıyor...'
+                : 'Enerji İçeceği İçiliyor...'}
+            </span>
+          </div>
+          <div className="w-56 h-2 rounded-full bg-slate-900 border border-emerald-500/30 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 animate-pulse rounded-full w-full" />
+          </div>
+        </div>
+      )}
+
       {/* BOTTOM CONTROL & STATUS BAR */}
       <div className="flex items-end justify-between w-full gap-4">
         {/* Bottom Left: Vitals (HP, Armor, Boost & Scope) */}
         <div className="flex flex-col gap-2 pointer-events-auto">
-          {/* Scope Badge */}
-          <div className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/85 border border-indigo-500/40 text-xs font-bold text-indigo-300 backdrop-blur-md shadow-md">
-            <Crosshair className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{SCOPES[myPlayer.scope]?.name || '1x Görüş'}</span>
-            <span className="text-[10px] text-indigo-400/80 font-normal ml-0.5">
-              ({myPlayer.scope === '8x' ? 'Maksimum Geniş Görüş' : myPlayer.scope === '4x' ? 'Geniş Görüş' : myPlayer.scope === '2x' ? 'Orta Görüş' : 'Standart'})
-            </span>
+          {/* Status Badges Row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Scope Badge */}
+            <div className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/85 border border-indigo-500/40 text-xs font-bold text-indigo-300 backdrop-blur-md shadow-md">
+              <Crosshair className="w-3.5 h-3.5 text-indigo-400" />
+              <span>{SCOPES[myPlayer.scope]?.name || '1x Görüş'}</span>
+            </div>
+
+            {/* Wet Status Badge */}
+            {myPlayer.isWet && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-950/90 border border-sky-400/60 text-xs font-bold text-sky-300 backdrop-blur-md shadow-md animate-pulse">
+                <span>💧</span>
+                <span>{myPlayer.inWater ? 'Suda Yüzüyor' : 'Islandın (Yavaşlama)'}</span>
+              </div>
+            )}
           </div>
 
           <div className="w-64 sm:w-72 p-3 rounded-2xl bg-slate-900/90 border border-slate-700/80 backdrop-blur-md shadow-2xl flex flex-col gap-2">
@@ -164,34 +193,37 @@ export default function SurvivalHUD({
               </div>
             </div>
 
-            {/* Quick Heals Pill */}
-            <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between gap-1 text-[11px] font-bold">
+            {/* Quick Heals Pill / Inventory */}
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-1.5 text-[11px] font-bold">
               <button
                 type="button"
                 onClick={() => onUseHeal('bandage')}
-                className="flex-1 py-1 px-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1 transition cursor-pointer"
-                title="Sargı Bezi [7]"
+                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-700 hover:border-emerald-500/50"
+                title="Sargı Bezi [Tuş: 4]"
               >
                 <span>🩹</span>
                 <span>{myPlayer.heals?.bandage || 0}</span>
+                <span className="text-[9px] text-emerald-400 font-mono font-bold">[4]</span>
               </button>
               <button
                 type="button"
                 onClick={() => onUseHeal('medkit')}
-                className="flex-1 py-1 px-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1 transition cursor-pointer"
-                title="İlk Yardım Çantası [8]"
+                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-700 hover:border-emerald-500/50"
+                title="İlk Yardım Çantası [Tuş: 5]"
               >
                 <span>🧰</span>
                 <span>{myPlayer.heals?.medkit || 0}</span>
+                <span className="text-[9px] text-emerald-400 font-mono font-bold">[5]</span>
               </button>
               <button
                 type="button"
                 onClick={() => onUseHeal('soda')}
-                className="flex-1 py-1 px-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1 transition cursor-pointer"
-                title="Enerji İçeceği [9]"
+                className="flex-1 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-700 hover:border-emerald-500/50"
+                title="Enerji İçeceği [Tuş: 6]"
               >
                 <span>🥤</span>
                 <span>{myPlayer.heals?.soda || 0}</span>
+                <span className="text-[9px] text-emerald-400 font-mono font-bold">[6]</span>
               </button>
             </div>
           </div>
@@ -209,7 +241,7 @@ export default function SurvivalHUD({
           <span className="text-slate-600">•</span>
           <span><span className="font-mono text-yellow-400 font-black">F / E</span> Al</span>
           <span className="text-slate-600">•</span>
-          <span><span className="font-mono text-red-400 font-black">7, 8, 9</span> İyileş</span>
+          <span><span className="font-mono text-red-400 font-black">4, 5, 6 (veya H)</span> İyileş</span>
         </div>
 
         {/* Bottom Right: Weapons & Ammo Arsenal */}

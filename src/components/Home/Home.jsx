@@ -1,27 +1,87 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGame } from '../../context/GameContext';
 import { AVATARS } from '../../utils/turkish';
-import { Sparkles, Play, LogIn, Users, Flame, Award, Gamepad2 } from 'lucide-react';
+import { Sparkles, Play, LogIn, Users, Flame, Award, Gamepad2, Link as LinkIcon } from 'lucide-react';
+
+function getInitialInviteCode() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('oda') || params.get('room') || window.__initialRoomCode || '';
+    return code.trim().toUpperCase();
+  } catch {
+    return '';
+  }
+}
 
 export default function Home() {
   const { createRoom, joinRoom, error, setError } = useGame();
-  const [activeTab, setActiveTab] = useState(() => window.__initialRoomCode ? 'join' : 'create'); // 'create' | 'join'
+  const inviteCode = getInitialInviteCode();
 
-  const [name, setName] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState('🦁');
-  const [roomCode, setRoomCode] = useState(() => window.__initialRoomCode || '');
+  const [activeTab, setActiveTab] = useState(() => inviteCode ? 'join' : 'create'); // 'create' | 'join'
+
+  const [name, setName] = useState(() => {
+    try {
+      return localStorage.getItem('gamehub_player_name') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [selectedAvatar, setSelectedAvatar] = useState(() => {
+    try {
+      return localStorage.getItem('gamehub_player_avatar') || '🦁';
+    } catch {
+      return '🦁';
+    }
+  });
+
+  const [roomCode, setRoomCode] = useState(() => inviteCode);
   const [loading, setLoading] = useState(false);
+  const autoJoinAttempted = useRef(false);
+
+  // Auto-join if user clicked an invite link and already has a saved name
+  useEffect(() => {
+    const code = getInitialInviteCode();
+    const savedName = localStorage.getItem('gamehub_player_name');
+    const savedAvatar = localStorage.getItem('gamehub_player_avatar') || '🦁';
+
+    if (code && savedName && !autoJoinAttempted.current) {
+      autoJoinAttempted.current = true;
+      setLoading(true);
+      setError(null);
+
+      joinRoom(code, savedName.trim(), savedAvatar)
+        .then(() => {
+          // Clean URL so back/refresh works cleanly
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch (e) {}
+        })
+        .catch(() => {
+          setLoading(false);
+        });
+    }
+  }, [joinRoom, setError]);
+
+  const saveProfile = (playerName, playerAvatar) => {
+    try {
+      localStorage.setItem('gamehub_player_name', playerName);
+      localStorage.setItem('gamehub_player_avatar', playerAvatar);
+    } catch (e) {}
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!name.trim()) {
+    const trimmed = name.trim();
+    if (!trimmed) {
       setError('Lütfen bir takma ad girin.');
       return;
     }
+    saveProfile(trimmed, selectedAvatar);
     setLoading(true);
     setError(null);
     try {
-      await createRoom(name.trim(), selectedAvatar);
+      await createRoom(trimmed, selectedAvatar);
     } catch (err) {
       // Handled by context
     } finally {
@@ -31,18 +91,26 @@ export default function Home() {
 
   const handleJoin = async (e) => {
     e.preventDefault();
-    if (!name.trim()) {
+    const trimmed = name.trim();
+    const trimmedCode = (roomCode || inviteCode).trim().toUpperCase();
+
+    if (!trimmed) {
       setError('Lütfen bir takma ad girin.');
       return;
     }
-    if (!roomCode.trim()) {
+    if (!trimmedCode) {
       setError('Lütfen 5 haneli oda kodunu girin.');
       return;
     }
+
+    saveProfile(trimmed, selectedAvatar);
     setLoading(true);
     setError(null);
     try {
-      await joinRoom(roomCode.trim(), name.trim(), selectedAvatar);
+      await joinRoom(trimmedCode, trimmed, selectedAvatar);
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (e) {}
     } catch (err) {
       // Handled by context
     } finally {
@@ -71,6 +139,22 @@ export default function Home() {
 
       {/* Main Action Box */}
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-slate-200/70 border border-slate-200/80 overflow-hidden transition-all">
+        {/* Direct Invite Notification Banner */}
+        {inviteCode && (
+          <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 p-3.5 text-white flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+              <LinkIcon className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-white/90">Davet Bağlantısı İle Giriş</div>
+              <div className="text-sm font-black font-heading tracking-wide">
+                <span className="bg-white/25 px-2 py-0.5 rounded-lg mr-1 font-mono">{inviteCode}</span>
+                Odasındasınız
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tab switchers */}
         <div className="grid grid-cols-2 p-1.5 bg-slate-100 border-b border-slate-200/70 m-3 rounded-2xl">
           <button
@@ -137,6 +221,7 @@ export default function Home() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Adını yaz..."
+              autoFocus={Boolean(inviteCode)}
               className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-emerald-500 focus:outline-hidden text-base font-semibold transition bg-slate-50/50 focus:bg-white text-slate-900"
               required
             />
@@ -172,7 +257,10 @@ export default function Home() {
             className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-heading font-black text-lg tracking-wide shadow-lg shadow-emerald-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
           >
             {loading ? (
-              <span className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="flex items-center gap-2">
+                <span className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Odaya Katılınıyor...</span>
+              </span>
             ) : activeTab === 'create' ? (
               <>
                 <Play className="w-5 h-5 fill-current" />
@@ -181,7 +269,7 @@ export default function Home() {
             ) : (
               <>
                 <LogIn className="w-5 h-5" />
-                Odaya Katıl
+                {inviteCode ? `${inviteCode} Odasına Katıl` : 'Odaya Katıl'}
               </>
             )}
           </button>
