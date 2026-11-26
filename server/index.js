@@ -100,6 +100,18 @@ async function emitGameOver(room, leaderboard, mode) {
 
   const wordDetails = await getWordsDetailsMap(words);
   console.log(`[Game Over Broadcast] Room ${room.code}, Mode: ${mode}, Trouble: ${Boolean(room.wordleSession?.isTroubleMode)}, Words:`, words);
+
+  // Construct playerWords map reliably for all players (standard or trouble)
+  const playerWords = {};
+  if (room.wordleSession?.playerWords) {
+    Object.assign(playerWords, room.wordleSession.playerWords);
+  } else {
+    const standardWords = room.wordleSession?.words || words || [];
+    room.players.forEach(p => {
+      playerWords[p.id] = [...standardWords];
+    });
+  }
+
   io.to(room.code).emit('game_over', {
     room,
     leaderboard,
@@ -108,7 +120,8 @@ async function emitGameOver(room, leaderboard, mode) {
     wordDetails,
     mode,
     isTroubleMode: Boolean(room.wordleSession?.isTroubleMode),
-    playerWords: room.wordleSession?.playerWords || null
+    troubleAssignments: room.wordleSession?.troubleAssignments || null,
+    playerWords
   });
 }
 

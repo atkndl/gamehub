@@ -356,6 +356,7 @@ export function startWordleGame(socketId) {
       avatar: p.avatar,
       currentWordIndex: 0,
       guesses: [], // current word guesses: [{ guess, result }]
+      wordHistory: [], // [{ wordIndex, word, isSolved, isFailed, guessCount, points }]
       solvedWordsCount: 0,
       isCurrentWordSolved: false,
       isCurrentWordFailed: false,
@@ -471,6 +472,7 @@ export function handleTroubleConfirmSelection(socketId, selectedWords = []) {
       avatar: p.avatar,
       currentWordIndex: 0,
       guesses: [],
+      wordHistory: [],
       solvedWordsCount: 0,
       isCurrentWordSolved: false,
       isCurrentWordFailed: false,
@@ -590,6 +592,16 @@ export function handleWordleGuess(socketId, guessWord) {
       progress.isCurrentWordFailed = true;
       pointsEarned = 0;
     }
+
+    if (!progress.wordHistory) progress.wordHistory = [];
+    progress.wordHistory.push({
+      wordIndex,
+      word: targetWord,
+      isSolved: isCorrect,
+      isFailed: isFailed,
+      guessCount: guessNumber,
+      points: pointsEarned
+    });
 
     progress.roundPoints.push(pointsEarned);
     progress.totalScore += pointsEarned;

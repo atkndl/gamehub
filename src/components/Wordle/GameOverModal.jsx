@@ -3,7 +3,7 @@ import confetti from 'canvas-confetti';
 import { useGame } from '../../context/GameContext';
 import { toTurkishUpper } from '../../utils/turkish';
 import { Trophy, RotateCcw, Home, Sparkles, Award, Clock, Target, CheckCircle2, LogOut } from 'lucide-react';
-import TDKWordCard from './TDKWordCard';
+import PlayerWordsTables from './PlayerWordsTables';
 
 export default function GameOverModal({ data }) {
   const { player, rematch, returnToLobby, leaveRoom } = useGame();
@@ -75,7 +75,7 @@ export default function GameOverModal({ data }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-md animate-fade-in overflow-y-auto">
-      <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col p-5 sm:p-7 text-center my-auto max-h-[95vh] overflow-y-auto">
+      <div className="w-full max-w-4xl lg:max-w-6xl xl:max-w-7xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col p-4 sm:p-7 text-center my-auto max-h-[95vh] overflow-y-auto">
         {/* Top celebratory pill */}
         <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-900 text-xs font-black uppercase tracking-wider border border-amber-200/80 shadow-xs">
@@ -99,136 +99,146 @@ export default function GameOverModal({ data }) {
             : 'En yüksek puanı toplayarak zirveye yerleşti!'}
         </p>
 
-        {/* Podium visualization (if 2 or more players) */}
-        {leaderboard.length >= 2 && (
-          <div className="flex justify-center items-end gap-2 my-5 pt-4 px-2">
-            {/* 2nd place */}
-            {second && (
-              <div className="flex-1 flex flex-col items-center">
-                <span className="text-2xl mb-1">{second.avatar}</span>
-                <span className="font-bold text-xs text-slate-700 truncate max-w-[85px]">
-                  {second.name}
-                </span>
-                <span className="text-[10px] text-slate-500 font-bold mb-1">
-                  {second.solvedWordsCount} / {totalWordsCount} Doğru
-                </span>
-                <div className="w-full bg-slate-200 h-18 sm:h-20 rounded-t-2xl flex items-center justify-center font-heading font-black text-slate-600 text-base sm:text-lg border-t-4 border-slate-400 shadow-xs">
-                  🥈 2.
+        {/* Centered Podium & Full Leaderboard Container */}
+        <div className="w-full max-w-3xl mx-auto my-3">
+          {/* Podium visualization (if 2 or more players) */}
+          {leaderboard.length >= 2 && (
+            <div className="flex justify-center items-end gap-2 my-5 pt-4 px-2">
+              {/* 2nd place */}
+              {second && (
+                <div className="flex-1 flex flex-col items-center">
+                  <span className="text-2xl mb-1">{second.avatar}</span>
+                  <span className="font-bold text-xs text-slate-700 truncate max-w-[85px]">
+                    {second.name}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-bold mb-1">
+                    {second.solvedWordsCount} / {totalWordsCount} Doğru
+                  </span>
+                  <div className="w-full bg-slate-200 h-18 sm:h-20 rounded-t-2xl flex items-center justify-center font-heading font-black text-slate-600 text-base sm:text-lg border-t-4 border-slate-400 shadow-xs">
+                    🥈 2.
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 1st place (winner) */}
-            {winner && (
-              <div className="flex-1 flex flex-col items-center">
-                <span className="text-3xl sm:text-4xl mb-1 animate-bounce">{winner.avatar}</span>
-                <span className="font-black text-xs sm:text-sm text-slate-900 truncate max-w-[105px]">
-                  {winner.name}
-                </span>
-                <span className="text-[11px] text-amber-600 font-black mb-1">
-                  {winner.solvedWordsCount} / {totalWordsCount} DOĞRU
-                </span>
-                <div className="w-full bg-gradient-to-t from-amber-400 to-amber-300 h-26 sm:h-28 rounded-t-2xl flex items-center justify-center font-heading font-black text-white text-xl sm:text-2xl shadow-md border-t-4 border-amber-500">
-                  🥇 1.
+              {/* 1st place (winner) */}
+              {winner && (
+                <div className="flex-1 flex flex-col items-center">
+                  <span className="text-3xl sm:text-4xl mb-1 animate-bounce">{winner.avatar}</span>
+                  <span className="font-black text-xs sm:text-sm text-slate-900 truncate max-w-[105px]">
+                    {winner.name}
+                  </span>
+                  <span className="text-[11px] text-amber-600 font-black mb-1">
+                    {winner.solvedWordsCount} / {totalWordsCount} DOĞRU
+                  </span>
+                  <div className="w-full bg-gradient-to-t from-amber-400 to-amber-300 h-26 sm:h-28 rounded-t-2xl flex items-center justify-center font-heading font-black text-white text-xl sm:text-2xl shadow-md border-t-4 border-amber-500">
+                    🥇 1.
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 3rd place */}
-            {third && (
-              <div className="flex-1 flex flex-col items-center">
-                <span className="text-2xl mb-1">{third.avatar}</span>
-                <span className="font-bold text-xs text-slate-700 truncate max-w-[85px]">
-                  {third.name}
-                </span>
-                <span className="text-[10px] text-slate-500 font-bold mb-1">
-                  {third.solvedWordsCount} / {totalWordsCount} Doğru
-                </span>
-                <div className="w-full bg-amber-100/90 h-14 sm:h-16 rounded-t-2xl flex items-center justify-center font-heading font-black text-amber-700 text-sm sm:text-base border-t-4 border-amber-500 shadow-xs">
-                  🥉 3.
+              {/* 3rd place */}
+              {third && (
+                <div className="flex-1 flex flex-col items-center">
+                  <span className="text-2xl mb-1">{third.avatar}</span>
+                  <span className="font-bold text-xs text-slate-700 truncate max-w-[85px]">
+                    {third.name}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-bold mb-1">
+                    {third.solvedWordsCount} / {totalWordsCount} Doğru
+                  </span>
+                  <div className="w-full bg-amber-100/90 h-14 sm:h-16 rounded-t-2xl flex items-center justify-center font-heading font-black text-amber-700 text-sm sm:text-base border-t-4 border-amber-500 shadow-xs">
+                    🥉 3.
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {/* Full Leaderboard Table (Tüm Sıralama) */}
-        <div className="mb-4 text-left">
-          <div className="flex items-center justify-between mb-1.5 px-1">
-            <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Trophy className="w-3.5 h-3.5 text-amber-500" />
-              Tüm Oyuncular Sıralaması
-            </span>
-            <span className="text-[11px] text-slate-400">
-              {leaderboard.length} Oyuncu
-            </span>
-          </div>
+          {/* Full Leaderboard Table (Tüm Sıralama) */}
+          <div className="mb-4 text-left">
+            <div className="flex items-center justify-between mb-1.5 px-1">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                Tüm Oyuncular Sıralaması
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {leaderboard.length} Oyuncu
+              </span>
+            </div>
 
-          <div className="bg-slate-50 rounded-2xl border border-slate-200/80 overflow-hidden divide-y divide-slate-100">
-            {leaderboard.map((item) => {
-              const isSelf = item.playerId === player?.id;
-              return (
-                <div
-                  key={item.playerId}
-                  className={`p-3 flex items-center justify-between transition-colors ${
-                    isSelf ? 'bg-emerald-50/70 font-semibold' : 'hover:bg-slate-100/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span
-                      className={`w-6 h-6 rounded-full flex items-center justify-center font-heading font-black text-xs shrink-0 ${
-                        item.rank === 1
-                          ? 'bg-amber-400 text-white'
-                          : item.rank === 2
-                          ? 'bg-slate-300 text-slate-800'
-                          : item.rank === 3
-                          ? 'bg-amber-700/60 text-white'
-                          : 'bg-slate-200 text-slate-600'
-                      }`}
-                    >
-                      {item.rank}
-                    </span>
-                    <span className="text-xl select-none shrink-0">{item.avatar}</span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-900 truncate">
-                          {item.name}
-                        </span>
-                        {isSelf && (
-                          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-md bg-emerald-500 text-white">
-                            Sen
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-400 block">
-                        {item.finishTime ? `Süre: ${formatDuration(item.finishTime)}` : 'Yarış Tamamlandı'}
+            <div className="bg-slate-50 rounded-2xl border border-slate-200/80 overflow-hidden divide-y divide-slate-100">
+              {leaderboard.map((item) => {
+                const isSelf = item.playerId === player?.id;
+                return (
+                  <div
+                    key={item.playerId}
+                    className={`p-3 flex items-center justify-between transition-colors ${
+                      isSelf ? 'bg-emerald-50/70 font-semibold' : 'hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center font-heading font-black text-xs shrink-0 ${
+                          item.rank === 1
+                            ? 'bg-amber-400 text-white'
+                            : item.rank === 2
+                            ? 'bg-slate-300 text-slate-800'
+                            : item.rank === 3
+                            ? 'bg-amber-700/60 text-white'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {item.rank}
                       </span>
+                      <span className="text-xl select-none shrink-0">{item.avatar}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-900 truncate">
+                            {item.name}
+                          </span>
+                          {isSelf && (
+                            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-md bg-emerald-500 text-white">
+                              Sen
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 block">
+                          {item.finishTime ? `Süre: ${formatDuration(item.finishTime)}` : 'Yarış Tamamlandı'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 text-right">
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-lg">
+                        {item.solvedWordsCount} / {totalWordsCount} Doğru
+                      </span>
+                      {!isSpeedMode && (
+                        <span className="font-heading font-black text-xs sm:text-sm text-slate-800">
+                          {item.totalScore} P
+                        </span>
+                      )}
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-3 shrink-0 text-right">
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-lg">
-                      {item.solvedWordsCount} / {totalWordsCount} Doğru
-                    </span>
-                    {!isSpeedMode && (
-                      <span className="font-heading font-black text-xs sm:text-sm text-slate-800">
-                        {item.totalScore} P
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Words Revealed & TDK Educational Cards */}
-        {words.length > 0 && (
-          <TDKWordCard words={words} wordDetails={wordDetails} />
-        )}
+        {/* Words Revealed & TDK Educational Multi-Player Tables */}
+        <PlayerWordsTables
+          leaderboard={leaderboard}
+          playerWords={data.playerWords || room?.wordleSession?.playerWords || {}}
+          playerProgress={data.playerProgress || room?.wordleSession?.playerProgress || {}}
+          wordDetails={wordDetails}
+          troubleAssignments={data.troubleAssignments || room?.wordleSession?.troubleAssignments || null}
+          isTrouble={isTrouble}
+          currentPlayerId={player?.id}
+          totalWordsCount={totalWordsCount}
+        />
 
         {/* Action Controls for Host and Players */}
-        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-2.5 justify-center items-center">
+        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row gap-2.5 justify-center items-center max-w-xl mx-auto w-full">
           {isHost ? (
             <>
               <button
