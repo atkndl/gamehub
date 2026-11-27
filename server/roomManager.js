@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { evaluateWordleGuess, isWordleCorrect, toTurkishLower } from './wordleLogic.js';
 import { SnakeSession, SNAKE_CLASSES } from './snakeLogic.js';
 import { SurvivalSession } from './survivalLogic.js';
+import { LiarsBarSession } from './liarsBarLogic.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -177,7 +178,9 @@ export function createRoom(socketId, playerName, avatar) {
       mode: 'battle_royale', // 'battle_royale' (Alan Modu) | 'deathmatch' (Maç Modu)
       matchDuration: 180 // 3 minutes
     },
-    survivalSession: null
+    survivalSession: null,
+    liarsBarConfig: {},
+    liarsBarSession: null
   };
 
   rooms.set(roomCode, room);
@@ -791,6 +794,7 @@ export function returnToLobby(socketId) {
   room.troubleSession = null;
   room.snakeSession = null;
   room.survivalSession = null;
+  room.liarsBarSession = null;
   room.players.forEach(p => {
     p.score = 0;
   });
@@ -802,7 +806,7 @@ export function selectGame(socketId, gameId) {
   const room = getRoomBySocket(socketId);
   if (!room || room.hostId !== socketId) return null;
   if (room.gameState !== 'lobby') return null;
-  if (!['wordle', 'snake', 'survival'].includes(gameId)) return null;
+  if (!['wordle', 'snake', 'survival', 'liars_bar'].includes(gameId)) return null;
 
   room.selectedGame = gameId;
   return room;
@@ -868,5 +872,54 @@ export function restartSurvivalGame(socketId) {
   const room = getRoomBySocket(socketId);
   if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
   return startSurvivalGame(socketId);
+}
+
+// ==================== LIAR'S BAR (BLÖF) ====================
+
+export function startLiarsBarGame(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu başlatabilir.' };
+  if (room.players.length < 2) return { error: "Liar's Bar oyunu en az 2 oyuncu gerektirir!" };
+
+  room.selectedGame = 'liars_bar';
+  room.gameState = 'playing';
+  room.liarsBarSession = new LiarsBarSession(room.code, room.players, room.liarsBarConfig || {});
+  return { room, liarsBarSession: room.liarsBarSession };
+}
+
+export function restartLiarsBarGame(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
+  return startLiarsBarGame(socketId);
+}
+
+export function handleLiarsBarPlay(socketId, cardIds) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'playing' || !room.liarsBarSession) return { error: 'Oyun aktif değil.' };
+  return room.liarsBarSession.playCards(socketId, cardIds);
+}
+
+export function handleLiarsBarChallenge(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'playing' || !room.liarsBarSession) return { error: 'Oyun aktif değil.' };
+  return room.liarsBarSession.challenge(socketId);
+}
+
+export function handleLiarsBarProceedToBomb(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'playing' || !room.liarsBarSession) return { error: 'Oyun aktif değil.' };
+  return room.liarsBarSession.proceedToBomb();
+}
+
+export function handleLiarsBarCutWire(socketId, wireId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'playing' || !room.liarsBarSession) return { error: 'Oyun aktif değil.' };
+  return room.liarsBarSession.cutWire(socketId, wireId);
+}
+
+export function handleLiarsBarProceedAfterBomb(socketId) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'playing' || !room.liarsBarSession) return { error: 'Oyun aktif değil.' };
+  return room.liarsBarSession.proceedAfterBomb();
 }
 

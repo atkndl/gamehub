@@ -7,7 +7,7 @@ import LiveChat from '../Common/LiveChat';
 import { Copy, Check, Share2, Play, Users, Crown, Settings2, CheckCircle2, Sparkles, Zap, Flame, Snowflake, Shield } from 'lucide-react';
 
 export default function Lobby() {
-  const { room, player, showToast, updateProfile, updateWordleConfig, startWordle, startSnake, startSurvival, selectGame } = useGame();
+  const { room, player, showToast, updateProfile, updateWordleConfig, startWordle, startSnake, startSurvival, startLiarsBar, selectGame } = useGame();
   const [copied, setCopied] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [snakeClassModalOpen, setSnakeClassModalOpen] = useState(false);
@@ -65,6 +65,19 @@ export default function Lobby() {
     try {
       await startWordle();
     } catch (e) {}
+  };
+
+  const handleStartLiarsBar = async () => {
+    if (!isHost) return;
+    if (room.players.length < 2) {
+      showToast("Liar's Bar oyunu en az 2 oyuncu gerektirir! Lütfen arkadaşınızı davet edin 👥");
+      return;
+    }
+    try {
+      await startLiarsBar();
+    } catch (e) {
+      showToast(e.message || "Liar's Bar başlatılamadı.");
+    }
   };
 
   return (
@@ -445,6 +458,80 @@ export default function Lobby() {
                     <Settings2 className="w-3.5 h-3.5" />
                     Kuralları Gör
                   </button>
+                )}
+              </div>
+            </div>
+
+            {/* Card 4: Liar's Bar (Blöf) */}
+            <div
+              className={`bg-white rounded-2xl p-5 border-2 transition-all flex flex-col justify-between ${
+                room.selectedGame === 'liars_bar'
+                  ? 'border-amber-500/90 shadow-md shadow-amber-500/15 ring-2 ring-amber-500/10'
+                  : 'border-slate-200 hover:border-slate-300 opacity-90'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 via-rose-600 to-amber-400 text-white flex items-center justify-center text-xl shadow-xs">
+                    🍸
+                  </div>
+                  {room.selectedGame === 'liars_bar' ? (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-600" />
+                      Aktif Oyun
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300">
+                      YENİ! POPÜLER 🔥
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <h3 className="font-heading font-black text-base text-slate-900">
+                    Liar's Bar (Blöf)
+                  </h3>
+                  <span className="text-xs">💀</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">
+                  2–4 Oyuncu • K-Q-A & Joker • 6 Kablolu Bomba
+                </p>
+
+                {/* Settings Pill */}
+                <div className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/80 text-xs text-stone-700 font-semibold mb-4 flex items-center justify-between">
+                  <span>🃏 20 Kart Deste</span>
+                  <span className="text-stone-300">•</span>
+                  <span>💣 C4 Rus Ruleti</span>
+                  <span className="text-stone-300">•</span>
+                  <span className="text-amber-700 font-bold">5 Kart Elde</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div>
+                {isHost ? (
+                  <div className="flex gap-2">
+                    {room.selectedGame === 'liars_bar' ? (
+                      <button
+                        onClick={handleStartLiarsBar}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 hover:from-amber-600 hover:to-red-700 text-white font-heading font-black text-xs tracking-wide shadow-md shadow-amber-500/25 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Liar's Bar Başlat (2–4 Kişi)
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => selectGame('liars_bar')}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 font-heading font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        Liar's Bar'ı Seç
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-full py-2.5 px-3 rounded-xl bg-slate-50 text-slate-500 font-medium text-xs text-center border border-slate-200">
+                    👑 Oda sahibi Liar's Bar oyununu başlatabilir
+                  </div>
                 )}
               </div>
             </div>

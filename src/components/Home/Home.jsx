@@ -277,34 +277,47 @@ export default function Home() {
       </div>
 
       {/* Feature Pills */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10 w-full max-w-3xl">
-        <div className="p-4 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 text-lg">
-            ⚡
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-10 w-full max-w-4xl">
+        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center shrink-0 text-lg">
+            🍸
           </div>
           <div>
-            <h2 className="font-heading font-bold text-sm text-slate-800">Hız Modu</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Bilen beklemeden sonraki kelimeye geçer. En hızlı bitiren kazanır!</p>
+            <h2 className="font-heading font-black text-sm text-slate-900 flex items-center gap-1.5">
+              Liar's Bar (Blöf)
+              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-red-100 text-red-700">YENİ</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">K-Q-A blöfleri, itirazlar ve 6 kablolu C4 patlama gerilimi!</p>
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 text-lg">
-            🎯
+        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 text-lg">
+            🟩
           </div>
           <div>
-            <h2 className="font-heading font-bold text-sm text-slate-800">Puan Modu</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Herkes her kelimede aynı anda yarışır. Süre veya deneme sayısına göre puan topla!</p>
+            <h2 className="font-heading font-bold text-sm text-slate-800">Wordle & Trouble</h2>
+            <p className="text-xs text-slate-500 mt-0.5">5 harfli Türkçe kelimeler, rakiplerin kelime seçtiği Trouble modu.</p>
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 text-lg">
-            📚
+        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 text-lg">
+            🎖️
           </div>
           <div>
-            <h2 className="font-heading font-bold text-sm text-slate-800">13.000+ Kelime</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Zengin Türkçe kelime dağarcığı ve canlı rakip tahmin ızgarası.</p>
+            <h2 className="font-heading font-bold text-sm text-slate-800">Survival 2D</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Dürbün, seken mermiler, daralan kırmızı alan ve hayatta kalma.</p>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center shrink-0 text-lg">
+            🐍
+          </div>
+          <div>
+            <h2 className="font-heading font-bold text-sm text-slate-800">Yılan Arenası</h2>
+            <p className="text-xs text-slate-500 mt-0.5">4 farklı sınıf, buz dondurma, ateş topları ve can sistemi.</p>
           </div>
         </div>
       </div>

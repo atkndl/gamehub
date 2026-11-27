@@ -6,6 +6,7 @@ import Lobby from './components/Lobby/Lobby';
 import WordleGame from './components/Wordle/WordleGame';
 import SnakeGame from './components/Snake/SnakeGame';
 import SurvivalGame from './components/Survival/SurvivalGame';
+import LiarsBarGame from './components/LiarsBar/LiarsBarGame';
 
 // Synchronously parse room code from URL before components mount
 try {
@@ -27,10 +28,10 @@ function GameHubApp() {
     }
   }, [room]);
 
-  const inActiveSurvival = room?.selectedGame === 'survival' && room?.gameState !== 'lobby';
+  const isImmersiveGame = (room?.selectedGame === 'survival' || room?.selectedGame === 'liars_bar') && room?.gameState !== 'lobby';
 
   return (
-    <div className={`min-h-screen flex flex-col ${inActiveSurvival ? 'bg-slate-950 overflow-hidden' : 'bg-slate-50 text-slate-800'}`}>
+    <div className={`min-h-screen flex flex-col ${isImmersiveGame ? 'bg-slate-950 overflow-hidden' : 'bg-slate-50 text-slate-800'}`}>
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-slate-900/90 text-white text-xs sm:text-sm font-bold shadow-xl backdrop-blur-xs flex items-center gap-2 animate-bounce-subtle">
@@ -38,15 +39,17 @@ function GameHubApp() {
         </div>
       )}
 
-      {/* Top Navbar - Hidden during active Survival match */}
-      {!inActiveSurvival && <Navbar />}
+      {/* Top Navbar - Hidden during active Survival & Liar's Bar match */}
+      {!isImmersiveGame && <Navbar />}
 
       {/* Main Content Router */}
-      <main className={`flex-1 flex flex-col ${inActiveSurvival ? 'h-screen w-screen overflow-hidden' : ''}`}>
+      <main className={`flex-1 flex flex-col ${isImmersiveGame ? 'h-screen w-screen overflow-hidden' : ''}`}>
         {!room ? (
           <Home />
         ) : room.gameState === 'lobby' ? (
           <Lobby />
+        ) : room.selectedGame === 'liars_bar' ? (
+          <LiarsBarGame />
         ) : room.selectedGame === 'survival' ? (
           <SurvivalGame />
         ) : room.selectedGame === 'snake' ? (
@@ -56,8 +59,8 @@ function GameHubApp() {
         )}
       </main>
 
-      {/* Footer - Hidden during active Survival match */}
-      {!inActiveSurvival && (
+      {/* Footer - Hidden during active Survival & Liar's Bar match */}
+      {!isImmersiveGame && (
         <footer className="py-4 border-t border-slate-200/60 bg-white/50 text-center text-xs text-slate-400">
           <p>GameHub • Çok Oyunculu Türkçe Wordle & Parti Oyunları</p>
         </footer>

@@ -29,7 +29,14 @@ import {
   handleSurvivalInput,
   restartSurvivalGame,
   handleTroubleRefreshPool,
-  handleTroubleConfirmSelection
+  handleTroubleConfirmSelection,
+  startLiarsBarGame,
+  restartLiarsBarGame,
+  handleLiarsBarPlay,
+  handleLiarsBarChallenge,
+  handleLiarsBarProceedToBomb,
+  handleLiarsBarCutWire,
+  handleLiarsBarProceedAfterBomb
 } from './roomManager.js';
 import { SNAKE_CLASSES } from './snakeLogic.js';
 import { WEAPONS, SCOPES, ARMORS, HELMETS } from './survivalLogic.js';
@@ -576,6 +583,134 @@ io.on('connection', (socket) => {
     console.log(`[Survival Rematch Started] Room ${room.code}`);
     io.to(room.code).emit('game_started', room);
     startSurvivalLoop(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
+  // ==================== LIAR'S BAR (BLÖF) SOCKETS ====================
+
+  function broadcastLiarsBarState(room) {
+    if (!room || !room.liarsBarSession) return;
+    room.players.forEach(p => {
+      const state = room.liarsBarSession.getClientState(p.id);
+      io.to(p.id).emit('liars_bar_state', state);
+    });
+  }
+
+  // Start Liar's Bar Game
+  socket.on('start_liars_bar', (callback) => {
+    const result = startLiarsBarGame(socket.id);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    const room = result.room;
+    console.log(`[Liar's Bar Started] Room ${room.code}`);
+    io.to(room.code).emit('game_started', room);
+    broadcastLiarsBarState(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
+  // Play Cards (1-3 cards face down)
+  socket.on('liars_play_cards', ({ cardIds }, callback) => {
+    const room = getRoomBySocket(socket.id);
+    if (!room) return;
+    const result = handleLiarsBarPlay(socket.id, cardIds);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+
+    io.to(room.code).emit('liars_cards_played', result.playRecord);
+    broadcastLiarsBarState(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
+  // Challenge ("YALANCI!")
+  socket.on('liars_challenge', (callback) => {
+    const room = getRoomBySocket(socket.id);
+    if (!room) return;
+    const result = handleLiarsBarChallenge(socket.id);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+
+    // Broadcast reveal immediately with all dramatic info
+    io.to(room.code).emit('liars_reveal', result.revealData);
+    broadcastLiarsBarState(room);
+    if (typeof callback === 'function') callback({ success: true });
+
+    // After 3.5s dramatic card reveal, proceed to bomb defusal phase automatically
+    setTimeout(() => {
+      const roomRef = getRoom(room.code);
+      if (roomRef && roomRef.liarsBarSession && roomRef.liarsBarSession.status === 'revealing') {
+        roomRef.liarsBarSession.proceedToBomb();
+        io.to(room.code).emit('liars_bomb_phase', { penalizedPlayerId: result.revealData.penalizedPlayerId });
+        broadcastLiarsBarState(roomRef);
+      }
+    }, 3500);
+  });
+
+  // Cut Wire
+  socket.on('liars_cut_wire', ({ wireId }, callback) => {
+    const room = getRoomBySocket(socket.id);
+    if (!room) return;
+    const result = handleLiarsBarCutWire(socket.id, wireId);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+
+    // Broadcast wire cut outcome to all players
+    io.to(room.code).emit('liars_wire_cut', result.result);
+    broadcastLiarsBarState(room);
+    if (typeof callback === 'function') callback({ success: true, result: result.result });
+
+    // If game over (only 1 player survived)
+    if (result.result.gameOver) {
+      room.gameState = 'game_over';
+      io.to(room.code).emit('liars_game_over', {
+        winner: result.result.winner,
+        room
+      });
+      return;
+    }
+
+    // If safe wire: 2.5s delay then start next round.
+    // If exploded: 4.5s delay to let camera shake/fireball/cracks play out before next round.
+    const delayMs = result.result.isExplosion ? 4500 : 2500;
+    setTimeout(() => {
+      const roomRef = getRoom(room.code);
+      if (roomRef && roomRef.liarsBarSession && roomRef.liarsBarSession.status === 'bomb_defusal') {
+        const nextRes = roomRef.liarsBarSession.proceedAfterBomb();
+        if (nextRes.gameOver) {
+          roomRef.gameState = 'game_over';
+          io.to(room.code).emit('liars_game_over', {
+            winner: nextRes.winner,
+            room: roomRef
+          });
+        } else {
+          io.to(room.code).emit('liars_new_round', {
+            roundNumber: roomRef.liarsBarSession.roundNumber,
+            tableTarget: roomRef.liarsBarSession.tableTarget
+          });
+          broadcastLiarsBarState(roomRef);
+        }
+      }
+    }, delayMs);
+  });
+
+  // Rematch
+  socket.on('liars_rematch', (callback) => {
+    const result = restartLiarsBarGame(socket.id);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    const room = result.room;
+    console.log(`[Liar's Bar Rematch Started] Room ${room.code}`);
+    io.to(room.code).emit('game_started', room);
+    broadcastLiarsBarState(room);
     if (typeof callback === 'function') callback({ success: true });
   });
 

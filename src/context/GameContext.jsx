@@ -17,6 +17,7 @@ export function GameProvider({ children }) {
   const [snakeGameOverData, setSnakeGameOverData] = useState(null);
   const [survivalState, setSurvivalState] = useState(null);
   const [survivalGameOverData, setSurvivalGameOverData] = useState(null);
+  const [liarsBarState, setLiarsBarState] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
   // Show auto-dismissing toast
@@ -103,6 +104,7 @@ export function GameProvider({ children }) {
       setSnakeGameOverData(null);
       setSurvivalState(null);
       setSurvivalGameOverData(null);
+      setLiarsBarState(null);
       setOpponentProgress({});
       setRoom(updatedRoom);
       showToast('Oda lobiye döndü 🏠');
@@ -165,6 +167,15 @@ export function GameProvider({ children }) {
       showToast('Survival Sona Erdi! 🏆', 4000);
     }
 
+    function handleLiarsBarState(st) {
+      setLiarsBarState(st);
+    }
+
+    function handleLiarsGameOver(data) {
+      if (data.room) setRoom(data.room);
+      showToast(`Liar's Bar Sona Erdi! Şampiyon: ${data.winner?.name} 👑`, 4000);
+    }
+
     socket.on('room_updated', handleRoomUpdated);
     socket.on('game_started', handleGameStarted);
     socket.on('opponent_updated', handleOpponentUpdated);
@@ -177,6 +188,8 @@ export function GameProvider({ children }) {
     socket.on('survival_state', handleSurvivalState);
     socket.on('survival_events', handleSurvivalEvents);
     socket.on('survival_game_over', handleSurvivalGameOver);
+    socket.on('liars_bar_state', handleLiarsBarState);
+    socket.on('liars_game_over', handleLiarsGameOver);
     socket.on('lobby_returned', handleLobbyReturned);
     socket.on('chat_received', handleChatReceived);
 
@@ -193,6 +206,8 @@ export function GameProvider({ children }) {
       socket.off('survival_state', handleSurvivalState);
       socket.off('survival_events', handleSurvivalEvents);
       socket.off('survival_game_over', handleSurvivalGameOver);
+      socket.off('liars_bar_state', handleLiarsBarState);
+      socket.off('liars_game_over', handleLiarsGameOver);
       socket.off('lobby_returned', handleLobbyReturned);
       socket.off('chat_received', handleChatReceived);
     };
@@ -241,6 +256,7 @@ export function GameProvider({ children }) {
     setRoundSummaryData(null);
     setGameOverData(null);
     setOpponentProgress({});
+    setLiarsBarState(null);
   }, []);
 
   const updateProfile = useCallback((updates) => {
@@ -378,6 +394,63 @@ export function GameProvider({ children }) {
     });
   }, [showToast]);
 
+  // ==================== LIAR'S BAR ACTIONS ====================
+
+  const startLiarsBar = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      socket.emit('start_liars_bar', (res) => {
+        if (res.success) {
+          resolve();
+        } else {
+          showToast(res.error || "Liar's Bar başlatılamadı!");
+          reject(new Error(res.error));
+        }
+      });
+    });
+  }, [showToast]);
+
+  const playLiarsCards = useCallback((cardIds) => {
+    return new Promise((resolve, reject) => {
+      socket.emit('liars_play_cards', { cardIds }, (res) => {
+        if (res.success) {
+          resolve();
+        } else {
+          reject(new Error(res.error));
+        }
+      });
+    });
+  }, []);
+
+  const challengeLiars = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      socket.emit('liars_challenge', (res) => {
+        if (res.success) {
+          resolve();
+        } else {
+          reject(new Error(res.error));
+        }
+      });
+    });
+  }, []);
+
+  const cutLiarsWire = useCallback((wireId) => {
+    return new Promise((resolve, reject) => {
+      socket.emit('liars_cut_wire', { wireId }, (res) => {
+        if (res.success) {
+          resolve(res);
+        } else {
+          reject(new Error(res.error));
+        }
+      });
+    });
+  }, []);
+
+  const rematchLiars = useCallback(() => {
+    socket.emit('liars_rematch', (res) => {
+      if (!res.success) showToast(res.error);
+    });
+  }, [showToast]);
+
   return (
     <GameContext.Provider
       value={{
@@ -396,6 +469,7 @@ export function GameProvider({ children }) {
         snakeGameOverData,
         survivalState,
         survivalGameOverData,
+        liarsBarState,
         toastMessage,
         showToast,
         createRoom,
@@ -418,7 +492,12 @@ export function GameProvider({ children }) {
         updateSurvivalConfig,
         startSurvival,
         sendSurvivalInput,
-        survivalRematch
+        survivalRematch,
+        startLiarsBar,
+        playLiarsCards,
+        challengeLiars,
+        cutLiarsWire,
+        rematchLiars
       }}
     >
       {children}
