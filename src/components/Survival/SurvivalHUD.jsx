@@ -195,6 +195,53 @@ export default function SurvivalHUD({
         </div>
       )}
 
+      {/* LOW HP CRITICAL ALERT BANNER - Can azaldığında farkedip can basabilmek için */}
+      {isAlive && myPlayer.hp <= 45 && !myPlayer.healingItem && (
+        <div className="self-center mb-3 px-5 py-3 rounded-2xl bg-red-950/95 border-2 border-red-500 text-white backdrop-blur-md shadow-2xl shadow-red-500/40 flex items-center gap-3.5 animate-pulse pointer-events-auto">
+          <div className="w-9 h-9 rounded-full bg-red-600/90 flex items-center justify-center text-white shrink-0 shadow-lg shadow-red-500/50">
+            <Heart className="w-5 h-5 text-white fill-white animate-ping" />
+          </div>
+          <div className="flex flex-col text-left">
+            <span className="text-red-300 font-heading font-black text-sm tracking-wide flex items-center gap-1.5">
+              <span>⚠️ KRİTİK SAĞLIK!</span>
+              <span className="text-white font-mono bg-red-800/80 px-2 py-0.5 rounded-lg text-xs">{Math.round(myPlayer.hp)} HP</span>
+            </span>
+            <div className="text-xs text-amber-200 font-bold mt-1 flex items-center gap-2 flex-wrap">
+              {(myPlayer.heals?.medkit || 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => onUseHeal('medkit')}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1"
+                >
+                  <span>🧰 [5] İlk Yardım Bas</span>
+                </button>
+              ) : null}
+              {(myPlayer.heals?.bandage || 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => onUseHeal('bandage')}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-black text-xs shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1"
+                >
+                  <span>🩹 [4] Sargı Bezi Sar</span>
+                </button>
+              ) : null}
+              {(myPlayer.heals?.soda || 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => onUseHeal('soda')}
+                  className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-black text-xs shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1"
+                >
+                  <span>🥤 [6] Enerji İçeceği</span>
+                </button>
+              ) : null}
+              {!(myPlayer.heals?.medkit > 0 || myPlayer.heals?.bandage > 0 || myPlayer.heals?.soda > 0) && (
+                <span className="text-red-300 font-medium">Envanterinde can eşyası yok, hemen kutu kır veya ganimet bul!</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* BOTTOM CONTROL & STATUS BAR */}
       <div className="flex items-end justify-between w-full gap-4">
         {/* Bottom Left: Vitals (HP, Armor, Boost & Scope) */}
@@ -216,7 +263,11 @@ export default function SurvivalHUD({
             )}
           </div>
 
-          <div className="w-64 sm:w-72 p-3.5 rounded-3xl bg-slate-900/90 border border-slate-700/80 backdrop-blur-md shadow-2xl flex flex-col gap-2.5">
+          <div className={`w-64 sm:w-72 p-3.5 rounded-3xl backdrop-blur-md shadow-2xl flex flex-col gap-2.5 transition-all ${
+            myPlayer.hp <= 45
+              ? 'bg-red-950/95 border-2 border-red-500 shadow-red-500/40 ring-4 ring-red-500/20 animate-pulse'
+              : 'bg-slate-900/90 border border-slate-700/80'
+          }`}>
             {/* Health Bar */}
             <div className="space-y-1">
               <div className="flex justify-between items-center text-[11px] font-bold">
@@ -281,7 +332,11 @@ export default function SurvivalHUD({
             <span>İlk Yardım & İyileşme Envanteri</span>
           </div>
 
-          <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 backdrop-blur-md shadow-2xl">
+          <div className={`flex items-center gap-2 p-1.5 rounded-2xl backdrop-blur-md shadow-2xl transition-all ${
+            myPlayer.hp <= 45 && ((myPlayer.heals?.medkit || 0) > 0 || (myPlayer.heals?.bandage || 0) > 0)
+              ? 'bg-slate-900/95 border-2 border-emerald-400 shadow-emerald-500/30 ring-2 ring-emerald-400/40 animate-pulse'
+              : 'bg-slate-900/90 border border-slate-700/80'
+          }`}>
             {/* Bandage Slot */}
             <button
               type="button"

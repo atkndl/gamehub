@@ -14,7 +14,7 @@ export const WEAPONS = {
     damage: 24,
     fireDelay: 250, // ms
     bulletSpeed: 0,
-    range: 48,
+    range: 52,
     magSize: Infinity,
     reloadTime: 0,
     isMelee: true,
@@ -29,7 +29,7 @@ export const WEAPONS = {
     icon: '🔫',
     damage: 20,
     fireDelay: 160,
-    bulletSpeed: 20,
+    bulletSpeed: 23,
     range: 750,
     magSize: 15,
     reloadTime: 1300,
@@ -44,15 +44,15 @@ export const WEAPONS = {
     id: 'm870',
     name: 'M870 Pompalı',
     icon: '💥',
-    damage: 16, // 5 pellets * 16 = 80 max damage
+    damage: 17,
     fireDelay: 700,
-    bulletSpeed: 18,
-    range: 520,
+    bulletSpeed: 20,
+    range: 480, // Kısa menzil, ölümcül saçılma
     magSize: 5,
     reloadTime: 2000,
     isMelee: false,
-    bulletCount: 5,
-    spread: 0.20,
+    bulletCount: 6,
+    spread: 0.22,
     ammoType: '12g',
     color: '#f97316',
     length: 34
@@ -62,14 +62,14 @@ export const WEAPONS = {
     name: 'AK-47',
     icon: '⚡',
     damage: 26,
-    fireDelay: 125, // rapid auto
-    bulletSpeed: 23,
-    range: 980,
+    fireDelay: 125,
+    bulletSpeed: 26,
+    range: 1100,
     magSize: 30,
     reloadTime: 1800,
     isMelee: false,
     bulletCount: 1,
-    spread: 0.10,
+    spread: 0.08,
     ammoType: '762',
     color: '#ef4444',
     length: 38
@@ -78,15 +78,15 @@ export const WEAPONS = {
     id: 'm4a1',
     name: 'M4A1',
     icon: '🎯',
-    damage: 22,
-    fireDelay: 100, // very fast
-    bulletSpeed: 24,
-    range: 1000,
+    damage: 23,
+    fireDelay: 100,
+    bulletSpeed: 27,
+    range: 1200,
     magSize: 30,
     reloadTime: 1700,
     isMelee: false,
     bulletCount: 1,
-    spread: 0.06,
+    spread: 0.05,
     ammoType: '556',
     color: '#3b82f6',
     length: 36
@@ -95,17 +95,17 @@ export const WEAPONS = {
     id: 'mosin',
     name: 'Mosin Keskin Nişancı',
     icon: '🔭',
-    damage: 82, // devastating sniper
+    damage: 88, // Yüksek hasarlı keskin nişancı
     fireDelay: 1000,
-    bulletSpeed: 34,
-    range: 1600,
+    bulletSpeed: 45, // Çok hızlı ve uzun menzilli mermi
+    range: 2600, // Dürbünle uzaktan vurabilmek için yüksek menzil
     magSize: 5,
     reloadTime: 2200,
     isMelee: false,
     bulletCount: 1,
-    spread: 0.015,
+    spread: 0.006, // Lazer gibi isabetli
     ammoType: '762',
-    color: '#8b5cf6',
+    color: '#a855f7',
     length: 46
   },
   mp5: {
@@ -114,13 +114,13 @@ export const WEAPONS = {
     icon: '🔥',
     damage: 17,
     fireDelay: 90,
-    bulletSpeed: 21,
-    range: 780,
+    bulletSpeed: 23,
+    range: 800,
     magSize: 30,
     reloadTime: 1400,
     isMelee: false,
     bulletCount: 1,
-    spread: 0.11,
+    spread: 0.10,
     ammoType: '9mm',
     color: '#10b981',
     length: 28
@@ -260,17 +260,17 @@ export class SurvivalSession {
         helmetLevel: 0,
         boost: 0,
         weapons: {
-          primary: { ...WEAPONS.m9, ammo: WEAPONS.m9.magSize, isReloading: false },
+          primary: null,
           secondary: null,
           melee: { ...WEAPONS.fists }
         },
-        activeSlot: 'primary',
+        activeSlot: 'melee',
         scope: '1x',
         ammo: {
-          '9mm': 90,
-          '12g': 20,
-          '762': 90,
-          '556': 90
+          '9mm': 0,
+          '12g': 0,
+          '762': 0,
+          '556': 0
         },
         heals: {
           bandage: 0,
@@ -294,13 +294,68 @@ export class SurvivalSession {
   }
 
   getSpawnPosition(idx, total) {
-    const center = MAP_SIZE / 2;
-    const spawnRadius = 1100;
-    const angle = (idx / Math.max(1, total)) * Math.PI * 2 + Math.PI * 0.25;
-    return {
-      x: center + Math.cos(angle) * spawnRadius,
-      y: center + Math.sin(angle) * spawnRadius
-    };
+    const S = MAP_SIZE;
+    const margin = 450;
+    // Up to 50 attempts to find a safe open spot
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const candX = margin + Math.random() * (S - margin * 2);
+      const candY = margin + Math.random() * (S - margin * 2);
+
+      // Check collision with rectangular obstacles (walls, houses, containers, crates)
+      let collides = false;
+      const safeBuffer = 65;
+      if (Array.isArray(this.obstacles)) {
+        for (const ob of this.obstacles) {
+          if (
+            candX >= ob.x - safeBuffer &&
+            candX <= ob.x + ob.w + safeBuffer &&
+            candY >= ob.y - safeBuffer &&
+            candY <= ob.y + ob.h + safeBuffer
+          ) {
+            collides = true;
+            break;
+          }
+        }
+      }
+      if (collides) continue;
+
+      // Check collision with circular obstacles (trees, rocks, barrels)
+      if (Array.isArray(this.circularObstacles)) {
+        for (const cob of this.circularObstacles) {
+          if (distance(candX, candY, cob.x, cob.y) < cob.radius + safeBuffer) {
+            collides = true;
+            break;
+          }
+        }
+      }
+      if (collides) continue;
+
+      // Check water ponds (don't spawn in water)
+      if (Array.isArray(this.ponds)) {
+        for (const pond of this.ponds) {
+          if (distance(candX, candY, pond.x, pond.y) < pond.radius + 40) {
+            collides = true;
+            break;
+          }
+        }
+      }
+      if (collides) continue;
+
+      return { x: candX, y: candY };
+    }
+
+    // High quality deterministic fallbacks spread across open glades
+    const clearSpots = [
+      { x: 1200, y: 1200 },
+      { x: 3000, y: 1200 },
+      { x: 1200, y: 3000 },
+      { x: 3000, y: 3000 },
+      { x: 2100, y: 1500 },
+      { x: 2100, y: 2700 },
+      { x: 1500, y: 2100 },
+      { x: 2700, y: 2100 }
+    ];
+    return clearSpots[idx % clearSpots.length];
   }
 
   initMap() {
@@ -528,6 +583,24 @@ export class SurvivalSession {
     });
   }
 
+  destroyCrate(crate) {
+    if (!crate) return;
+    this.dropCrateLoot(crate);
+    const idx = this.obstacles.indexOf(crate);
+    if (idx !== -1) {
+      this.obstacles.splice(idx, 1);
+    }
+  }
+
+  destroyBarrel(barrel, events) {
+    if (!barrel) return;
+    const idx = this.circularObstacles.indexOf(barrel);
+    if (idx !== -1) {
+      this.circularObstacles.splice(idx, 1);
+    }
+    this.triggerBarrelExplosion(barrel, events);
+  }
+
   dropCrateLoot(crate) {
     const drops = [];
     const roll = Math.random();
@@ -574,13 +647,14 @@ export class SurvivalSession {
     }
 
     // Damage nearby crates
-    for (const ob of this.obstacles) {
+    for (let i = this.obstacles.length - 1; i >= 0; i--) {
+      const ob = this.obstacles[i];
       if (ob.type === 'crate') {
         const d = distance(barrel.x, barrel.y, ob.x + ob.w / 2, ob.y + ob.h / 2);
         if (d < aoeRadius) {
           ob.hp -= 80;
           if (ob.hp <= 0) {
-            this.dropCrateLoot(ob);
+            this.destroyCrate(ob);
           }
         }
       }
@@ -742,13 +816,17 @@ export class SurvivalSession {
           p.x = spawn.x;
           p.y = spawn.y;
           p.hp = 100;
-          p.vest = 50;
-          p.vestLevel = 1;
+          p.vest = 0;
+          p.vestLevel = 0;
           p.isAlive = true;
           p.respawnAt = null;
           p.invulnerableUntil = now + 2500;
-          p.weapons.primary = { ...WEAPONS.m9, ammo: WEAPONS.m9.magSize, isReloading: false };
-          p.activeSlot = 'primary';
+          p.weapons = {
+            primary: null,
+            secondary: null,
+            melee: { ...WEAPONS.fists }
+          };
+          p.activeSlot = 'melee';
         }
         continue;
       }
@@ -874,24 +952,26 @@ export class SurvivalSession {
             }
 
             // Punch crates
-            for (const ob of this.obstacles) {
+            for (let cIdx = this.obstacles.length - 1; cIdx >= 0; cIdx--) {
+              const ob = this.obstacles[cIdx];
               if (ob.type === 'crate') {
                 if (circleRectCollisionFast(punchX, punchY, 18, ob.x, ob.y, ob.w, ob.h)) {
                   ob.hp -= active.damage;
                   if (ob.hp <= 0) {
-                    this.dropCrateLoot(ob);
+                    this.destroyCrate(ob);
                   }
                 }
               }
             }
 
             // Punch barrels (triggers explosion!)
-            for (const cob of this.circularObstacles) {
+            for (let bIdx = this.circularObstacles.length - 1; bIdx >= 0; bIdx--) {
+              const cob = this.circularObstacles[bIdx];
               if (cob.type === 'barrel') {
                 if (distance(punchX, punchY, cob.x, cob.y) <= cob.radius + 18) {
                   cob.hp -= active.damage;
                   if (cob.hp <= 0) {
-                    this.triggerBarrelExplosion(cob, events);
+                    this.destroyBarrel(cob, events);
                   }
                 }
               }
@@ -1003,7 +1083,7 @@ export class SurvivalSession {
               if (ob.type === 'crate') {
                 ob.hp -= b.damage;
                 if (ob.hp <= 0) {
-                  this.dropCrateLoot(ob);
+                  this.destroyCrate(ob);
                 }
               }
               break;
@@ -1020,7 +1100,7 @@ export class SurvivalSession {
             if (cob.type === 'barrel') {
               cob.hp -= b.damage;
               if (cob.hp <= 0) {
-                this.triggerBarrelExplosion(cob, events);
+                this.destroyBarrel(cob, events);
               }
             }
             break;

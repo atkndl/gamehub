@@ -107,36 +107,25 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       const localIsWet = localInWater || (wetUntilRef.current && nowTime < wetUntilRef.current) || Boolean(myPlayer?.isWet);
       const inWaterFinal = localInWater || Boolean(myPlayer?.inWater);
 
-      // Local player prediction & reconciliation
+      // Local player position smoothing & responsive camera
       if (myPlayer) {
         if (!localPredictedRef.current.initialized) {
           localPredictedRef.current = { x: myPlayer.x, y: myPlayer.y, initialized: true };
         } else {
-          // Client-side input prediction
-          const keys = keysDownRef?.current;
-          let mx = 0;
-          let my = 0;
-          if (keys?.w) my -= 1;
-          if (keys?.s) my += 1;
-          if (keys?.a) mx -= 1;
-          if (keys?.d) mx += 1;
+          // Reconcile towards authoritative server position smoothly
+          const dx = myPlayer.x - localPredictedRef.current.x;
+          const dy = myPlayer.y - localPredictedRef.current.y;
+          const dist = Math.hypot(dx, dy);
 
-          if (mx !== 0 && my !== 0) {
-            mx *= 0.7071;
-            my *= 0.7071;
+          if (dist > 180) {
+            // Large warp or respawn: snap immediately
+            localPredictedRef.current.x = myPlayer.x;
+            localPredictedRef.current.y = myPlayer.y;
+          } else {
+            // Smoothly glide towards authoritative server position without runaway drift or sticking
+            localPredictedRef.current.x += dx * 0.40;
+            localPredictedRef.current.y += dy * 0.40;
           }
-
-          // Deep water: 45% slow (0.55); Lingering wet: 25% slow (0.75)
-          let spdMult = inWaterFinal ? 0.55 : (localIsWet ? 0.75 : 1.0);
-          if (myPlayer.boost > 0) spdMult += (myPlayer.boost / 100) * 0.25;
-          const frameSpeed = 6.8 * spdMult;
-
-          localPredictedRef.current.x += mx * frameSpeed;
-          localPredictedRef.current.y += my * frameSpeed;
-
-          // Smoothly reconcile towards authoritative server position
-          localPredictedRef.current.x += (myPlayer.x - localPredictedRef.current.x) * 0.22;
-          localPredictedRef.current.y += (myPlayer.y - localPredictedRef.current.y) * 0.22;
         }
 
         // Detect damage taken for full-screen red flash
@@ -150,9 +139,9 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       const targetCamX = localPredictedRef.current.initialized ? localPredictedRef.current.x : 2100;
       const targetCamY = localPredictedRef.current.initialized ? localPredictedRef.current.y : 2100;
 
-      // Ultra-smooth camera glide following predicted position
-      smoothCamRef.current.x += (targetCamX - smoothCamRef.current.x) * 0.35;
-      smoothCamRef.current.y += (targetCamY - smoothCamRef.current.y) * 0.35;
+      // Ultra-smooth camera glide following player
+      smoothCamRef.current.x += (targetCamX - smoothCamRef.current.x) * 0.38;
+      smoothCamRef.current.y += (targetCamY - smoothCamRef.current.y) * 0.38;
       const camX = smoothCamRef.current.x;
       const camY = smoothCamRef.current.y;
 
@@ -458,8 +447,19 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           let renderAngle = p.angle || 0;
 
           if (isSelf && localPredictedRef.current.initialized) {
-            renderX = localPredictedRef.current.x;
-            renderY = localPredictedRef.current.y;
+            const keys = keysDownRef?.current;
+            let mx = 0;
+            let my = 0;
+            if (keys?.w) my -= 1;
+            if (keys?.s) my += 1;
+            if (keys?.a) mx -= 1;
+            if (keys?.d) mx += 1;
+            if (mx !== 0 && my !== 0) {
+              mx *= 0.7071;
+              my *= 0.7071;
+            }
+            renderX = localPredictedRef.current.x + mx * 3.5;
+            renderY = localPredictedRef.current.y + my * 3.5;
           } else {
             let interp = interpPlayersRef.current[p.id];
             if (!interp) {
@@ -741,6 +741,30 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         damageFlashRef.current = Math.max(0, damageFlashRef.current - 0.022);
       }
 
+      // 2b. Low HP Pulsing Blood Vignette & Danger Alert (Can azaldığında kaçırılmayacak net kırmızı efekt!)
+      if (myPlayer && myPlayer.isAlive && myPlayer.hp <= 45) {
+        const hpRatio = 1 - Math.max(0, myPlayer.hp / 45); // 0 at 45hp, 1 at 0hp
+        const heartbeat = Math.sin(Date.now() / 180) * 0.5 + 0.5; // Hızlı nabız
+        const alpha = Math.min(0.78, 0.22 + hpRatio * 0.34 + heartbeat * 0.22);
+
+        const bloodGrad = ctx.createRadialGradient(
+          width / 2, height / 2, Math.min(width, height) * 0.24,
+          width / 2, height / 2, Math.max(width, height) * 0.72
+        );
+        bloodGrad.addColorStop(0, 'rgba(153, 27, 27, 0)');
+        bloodGrad.addColorStop(0.60, `rgba(185, 28, 28, ${alpha * 0.45})`);
+        bloodGrad.addColorStop(1, `rgba(127, 29, 29, ${alpha})`);
+        ctx.fillStyle = bloodGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        // Flashing thick red danger frame
+        ctx.save();
+        ctx.strokeStyle = `rgba(239, 68, 68, ${alpha * 0.85})`;
+        ctx.lineWidth = 10 + heartbeat * 8;
+        ctx.strokeRect(0, 0, width, height);
+        ctx.restore();
+      }
+
       // 3. Safe Zone Danger Alerts & Gas Pulsing
       if (curState?.mode === 'battle_royale' && curState?.zone && myPlayer) {
         const z = curState.zone;
@@ -822,17 +846,25 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         ctx.stroke();
       }
 
-      // Minimap Players
+      // Minimap Players - ONLY show self! (Düşmanların konumu gizlendi)
       if (Array.isArray(curState?.players)) {
         curState.players.forEach(p => {
           if (!p.isAlive) return;
           const isSelf = p.id === curMyPlayerId;
-          const px = isSelf && localPredictedRef.current.initialized ? localPredictedRef.current.x : p.x;
-          const py = isSelf && localPredictedRef.current.initialized ? localPredictedRef.current.y : p.y;
+          if (!isSelf) return; // Rakipler haritada görünmez
+          const px = localPredictedRef.current.initialized ? localPredictedRef.current.x : p.x;
+          const py = localPredictedRef.current.initialized ? localPredictedRef.current.y : p.y;
           ctx.beginPath();
-          ctx.arc(miniX + px * miniScale, miniY + py * miniScale, isSelf ? 4.5 : 2.5, 0, Math.PI * 2);
-          ctx.fillStyle = isSelf ? '#38bdf8' : '#ef4444';
+          ctx.arc(miniX + px * miniScale, miniY + py * miniScale, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#38bdf8';
           ctx.fill();
+
+          // Radar ping around self
+          ctx.beginPath();
+          ctx.arc(miniX + px * miniScale, miniY + py * miniScale, 7.5 + Math.sin(Date.now() / 200) * 2.5, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
         });
       }
 
