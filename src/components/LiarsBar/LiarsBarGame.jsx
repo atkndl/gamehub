@@ -3,22 +3,15 @@ import { useGame } from '../../context/GameContext';
 import LiarsBarCard, { CardBackIllustration } from './LiarsBarCard';
 import BombDefusalModal from './BombDefusalModal';
 import { liarsAudio } from '../../utils/liarsBarAudio';
-import LiveChat from '../Common/LiveChat';
 import confetti from 'canvas-confetti';
 import {
-  Flame,
-  ShieldAlert,
   Play,
   RotateCcw,
   Home,
-  MessageCircle,
   Skull,
-  Crown,
-  Eye,
-  CheckCircle2,
   Clock,
   Zap,
-  Info
+  Sparkles
 } from 'lucide-react';
 
 export default function LiarsBarGame() {
@@ -31,14 +24,13 @@ export default function LiarsBarGame() {
     cutLiarsWire,
     rematchLiars,
     returnToLobby,
-    chatMessages,
     showToast
   } = useGame();
 
   const [selectedCardIds, setSelectedCardIds] = useState([]);
   const [wireCutResult, setWireCutResult] = useState(null);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [lastMoveAnnouncement, setLastMoveAnnouncement] = useState('');
+  const [flyingCards, setFlyingCards] = useState(null); // { count: number, from: 'self' | 'opponent', key: number }
+  const [showGameOverModal, setShowGameOverModal] = useState(false);
 
   const isHost = player?.isHost;
   const state = liarsBarState;
@@ -68,13 +60,19 @@ export default function LiarsBarGame() {
     }
   }, [state?.status, state?.lastReveal]);
 
-  // Confetti on game over win
+  // Smooth delayed Game Over Modal (waits for explosion to fully subside)
   useEffect(() => {
     if (state?.status === 'game_over' && state?.winner) {
-      liarsAudio.playWinFanfare();
-      try {
-        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-      } catch (e) {}
+      const timer = setTimeout(() => {
+        setShowGameOverModal(true);
+        liarsAudio.playWinFanfare();
+        try {
+          confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+        } catch (e) {}
+      }, 1200);
+      return () => clearTimeout(timer);
+    } else {
+      setShowGameOverModal(false);
     }
   }, [state?.status, state?.winner]);
 
@@ -83,16 +81,29 @@ export default function LiarsBarGame() {
     setSelectedCardIds([]);
   }, [state?.currentTurnPlayerId, state?.roundNumber]);
 
+  // Listen for opponents playing cards to trigger card fly animation
+  useEffect(() => {
+    if (state?.lastPlay && state.lastPlay.playerId !== player?.id) {
+      setFlyingCards({
+        count: state.lastPlay.cardCount,
+        from: 'opponent',
+        key: state.lastPlay.timestamp
+      });
+      const timer = setTimeout(() => setFlyingCards(null), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [state?.lastPlay?.timestamp, player?.id]);
+
   // Find self player object from server state
   const selfPlayer = state?.players?.find(p => p.id === player?.id);
   const myHand = selfPlayer?.hand || [];
   const opponents = state?.players?.filter(p => p.id !== player?.id) || [];
 
-  // Table target labels
+  // Table target labels & styling
   const targetLabels = {
-    K: { name: 'PAPAZ', icon: '👑', color: 'text-amber-400', border: 'border-amber-500' },
-    Q: { name: 'KIZ', icon: '🌹', color: 'text-pink-400', border: 'border-pink-500' },
-    A: { name: 'AS', icon: '♠️', color: 'text-sky-400', border: 'border-sky-500' }
+    K: { name: 'PAPAZ', suit: '♠', icon: '👑', color: 'text-amber-400', border: 'border-amber-500' },
+    Q: { name: 'KIZ', suit: '♥', icon: '🌹', color: 'text-rose-400', border: 'border-rose-500' },
+    A: { name: 'AS', suit: '♠', icon: '♠', color: 'text-sky-400', border: 'border-sky-500' }
   };
   const currentTargetInfo = targetLabels[state?.tableTarget || 'K'] || targetLabels.K;
 
@@ -119,7 +130,15 @@ export default function LiarsBarGame() {
     }
 
     try {
+      // Trigger card flight animation from hand to table!
+      setFlyingCards({
+        count: selectedCardIds.length,
+        from: 'self',
+        key: Date.now()
+      });
       liarsAudio.playCardSlide();
+      setTimeout(() => setFlyingCards(null), 600);
+
       await playLiarsCards(selectedCardIds);
       setSelectedCardIds([]);
     } catch (e) {
@@ -159,133 +178,124 @@ export default function LiarsBarGame() {
   const isMyPenalty = Boolean(state?.penalizedPlayerId === player?.id);
 
   return (
-    <div className="min-h-screen bg-radial from-stone-900 via-neutral-950 to-black text-white flex flex-col justify-between relative overflow-hidden select-none font-sans">
-      {/* Neo-noir background ambient glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-red-950/20 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-amber-950/15 rounded-full blur-[120px] pointer-events-none" />
+    <div className="h-screen max-h-screen w-full bg-radial from-stone-900 via-neutral-950 to-black text-white flex flex-col justify-between relative overflow-hidden select-none font-sans p-2 sm:p-3">
+      {/* Neo-noir ambient background glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-red-950/20 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-[600px] h-[250px] bg-amber-950/15 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Top Bar: Room Code & Game Status */}
-      <header className="p-3 sm:p-4 flex items-center justify-between border-b border-stone-800/80 bg-stone-950/70 backdrop-blur-md z-30">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-red-600 via-amber-600 to-amber-400 flex items-center justify-center font-black text-white text-base shadow-lg shadow-red-900/40">
-            🍸
+      {/* TOP HEADER: Prominent Left Trump Card + Room info + Exit */}
+      <header className="flex items-center justify-between border-b border-stone-800/80 bg-stone-950/80 backdrop-blur-md rounded-2xl p-2 sm:px-4 z-30 shrink-0">
+        {/* SOL ÜSTTE: DÜZGÜN, NET VE BÜYÜK GÖRÜNEN GÜNCEL KOZ (MASA HEDEFİ) KARTI */}
+        <div className="flex items-center gap-2 sm:gap-3 bg-stone-900/90 border-2 border-amber-500/80 rounded-2xl p-1.5 sm:p-2 shadow-lg shadow-amber-950/40">
+          <div className="w-10 h-14 sm:w-12 sm:h-17 rounded-lg overflow-hidden border border-amber-400/90 shadow-md shrink-0">
+            <LiarsBarCard card={{ type: state?.tableTarget || 'K' }} size="sm" className="w-full h-full" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-heading font-black text-sm sm:text-base text-amber-400 tracking-wider">
-                LIAR'S BAR
-              </span>
-              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 border border-red-800">
-                BLÖF MASASI
+          <div className="flex flex-col pr-1">
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] sm:text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-heading tracking-wider animate-pulse">
+                GÜNCEL KOZ
               </span>
             </div>
-            <span className="text-[11px] text-stone-400 font-mono">
-              Oda: <strong className="text-white">{room?.code}</strong> • Tur: #{state?.roundNumber || 1}
+            <span className={`font-heading font-black text-xs sm:text-base tracking-wide mt-0.5 ${currentTargetInfo.color}`}>
+              {currentTargetInfo.name} {currentTargetInfo.suit} ({state?.tableTarget})
+            </span>
+            <span className="text-[9px] text-stone-400 hidden sm:inline leading-none mt-0.5">
+              Bu kartı sürün veya blöf yapın!
             </span>
           </div>
         </div>
 
-        {/* Center Target Indicator Badge in Header for Quick glance */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-stone-900/90 border border-stone-700 shadow-md">
-          <span className="text-xs text-stone-400 font-bold">Masa Teması:</span>
-          <span className={`text-xs font-heading font-black flex items-center gap-1 ${currentTargetInfo.color}`}>
-            <span>{currentTargetInfo.icon}</span>
-            <span>{currentTargetInfo.name} ({state?.tableTarget})</span>
+        {/* Center Room Code & Round */}
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-2">
+            <span className="font-heading font-black text-xs sm:text-sm text-amber-400 tracking-wider">
+              LIAR'S BAR
+            </span>
+            <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full bg-red-950/80 text-red-400 border border-red-800">
+              BLÖF
+            </span>
+          </div>
+          <span className="text-[10px] text-stone-400 font-mono">
+            Oda: <strong className="text-white">{room?.code}</strong> • Tur: #{state?.roundNumber || 1}
           </span>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setChatOpen(!chatOpen)}
-            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 text-xs font-bold transition flex items-center gap-1.5 border border-stone-700 cursor-pointer"
-          >
-            <MessageCircle className="w-4 h-4 text-amber-400" />
-            <span className="hidden sm:inline">Sohbet</span>
-            {chatMessages?.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
-            )}
-          </button>
-
+        {/* Right Exit Button */}
+        <div>
           <button
             onClick={returnToLobby}
-            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-red-950/60 hover:bg-red-900/70 text-red-300 text-xs font-bold transition flex items-center gap-1.5 border border-red-800/80 cursor-pointer"
+            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-red-950/60 hover:bg-red-900/70 text-red-300 text-xs font-bold transition flex items-center gap-1.5 border border-red-800/80 cursor-pointer shadow-xs"
             title="Lobiye Dön"
           >
             <Home className="w-4 h-4" />
-            <span className="hidden sm:inline">Lobi</span>
+            <span className="hidden sm:inline">Lobiye Dön</span>
           </button>
         </div>
       </header>
 
-      {/* Main Poker Table Arena Area */}
-      <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-6 relative max-w-6xl mx-auto w-full">
-        {/* Opponents Row (Top and Sides) */}
-        <div className="w-full flex items-center justify-around gap-2 mb-4 z-20 flex-wrap">
+      {/* MAIN POKER TABLE ARENA (Compact 100vh Layout) */}
+      <div className="flex-1 flex flex-col items-center justify-between py-1 relative max-w-5xl mx-auto w-full min-h-0 overflow-hidden">
+        {/* Opponents Row */}
+        <div className="w-full flex items-center justify-around gap-2 z-20 shrink-0">
           {opponents.map(opp => {
             const isTurn = state?.currentTurnPlayerId === opp.id;
             const isAlive = opp.isAlive;
-            const remainingWires = opp.wires?.filter(w => !w.cut).length || 6;
 
             return (
               <div
                 key={opp.id}
-                className={`p-3 rounded-2xl border transition-all duration-300 flex items-center gap-3 backdrop-blur-md ${
+                className={`py-1.5 px-3 rounded-2xl border transition-all duration-300 flex items-center gap-2.5 backdrop-blur-md ${
                   !isAlive
                     ? 'bg-black/60 border-stone-800 opacity-40'
                     : isTurn
-                    ? 'bg-amber-950/40 border-amber-500 shadow-xl shadow-amber-500/20 scale-105'
+                    ? 'bg-amber-950/50 border-amber-500 shadow-lg shadow-amber-500/25 scale-105'
                     : 'bg-stone-900/80 border-stone-700/80'
                 }`}
               >
-                {/* Opponent Avatar with Alive / Skull Status */}
                 <div className="relative">
-                  <span className="text-3xl sm:text-4xl select-none block">
+                  <span className="text-2xl sm:text-3xl select-none block">
                     {isAlive ? opp.avatar : '💀'}
                   </span>
                   {isTurn && isAlive && (
-                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 animate-ping" />
+                    <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 animate-ping" />
                   )}
                 </div>
 
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-heading font-black text-xs sm:text-sm text-stone-100 truncate max-w-[90px]">
+                  <div className="flex items-center gap-1">
+                    <span className="font-heading font-black text-xs text-stone-100 truncate max-w-[80px]">
                       {opp.name}
                     </span>
                     {!isAlive && (
-                      <span className="text-[9px] font-black uppercase px-1 rounded-sm bg-red-950 text-red-400 border border-red-800">
-                        ELENDİ
+                      <span className="text-[8px] font-black uppercase px-1 rounded-sm bg-red-950 text-red-400 border border-red-800">
+                        ÖLDÜ
                       </span>
                     )}
                   </div>
 
-                  {/* Opponent Card Count (Face-down mini cards) */}
                   {isAlive && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <span className="text-[10px] text-stone-400 font-bold">
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[9px] text-stone-400 font-bold">
                         {opp.cardCount} Kart
                       </span>
                       <div className="flex gap-0.5">
                         {Array.from({ length: Math.min(opp.cardCount, 5) }).map((_, i) => (
-                          <div key={i} className="w-2.5 h-3.5 rounded-xs bg-amber-700/80 border border-amber-500/40 shadow-2xs" />
+                          <div key={i} className="w-2 h-3 rounded-xs bg-amber-700 border border-amber-500/50 shadow-2xs" />
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Bomb wire indicators */}
                   {isAlive && (
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-stone-400">
+                    <div className="flex items-center gap-1 mt-0.5 text-[9px] text-stone-400">
                       <span>💣</span>
-                      <div className="flex gap-1">
+                      <div className="flex gap-0.5">
                         {opp.wires?.map(w => (
                           <div
                             key={w.id}
                             className={`w-1.5 h-1.5 rounded-full ${
-                              w.cut ? 'bg-stone-700' : 'bg-red-500 shadow-xs'
+                              w.cut ? 'bg-stone-700' : 'bg-red-500'
                             }`}
-                            title={w.cut ? 'Kesildi' : 'Aktif'}
                           />
                         ))}
                       </div>
@@ -298,28 +308,28 @@ export default function LiarsBarGame() {
         </div>
 
         {/* Center Table (Dark Oval Velvet with Brass Rim) */}
-        <div className="w-full max-w-3xl aspect-16/9 bg-gradient-to-b from-stone-900 via-neutral-900 to-black rounded-[60px] sm:rounded-[100px] border-8 border-stone-800/90 shadow-2xl shadow-black relative flex flex-col items-center justify-center p-4 overflow-hidden">
-          {/* Green/Noir Felt Inner Texture */}
-          <div className="absolute inset-4 rounded-[45px] sm:rounded-[80px] bg-[radial-gradient(ellipse_at_center,_#1b2d1c_0%,_#0d170e_55%,_#050805_100%)] border-2 border-emerald-950 shadow-inner pointer-events-none" />
+        <div className="w-full max-w-2xl flex-1 max-h-[300px] sm:max-h-[330px] my-1 bg-gradient-to-b from-stone-900 via-neutral-900 to-black rounded-[45px] sm:rounded-[70px] border-6 sm:border-8 border-stone-800/90 shadow-2xl shadow-black relative flex flex-col items-center justify-center p-3 overflow-hidden">
+          {/* Felt Inner Texture */}
+          <div className="absolute inset-3 rounded-[35px] sm:rounded-[55px] bg-[radial-gradient(ellipse_at_center,_#162a17_0%,_#0b150c_60%,_#030604_100%)] border-2 border-emerald-950 shadow-inner pointer-events-none" />
 
-          {/* Center Table Target Emblem */}
-          <div className="relative z-10 flex flex-col items-center mb-3 text-center">
-            <div className={`px-4 py-1.5 rounded-full bg-black/70 border-2 ${currentTargetInfo.border} shadow-lg shadow-black/80 flex items-center gap-2 animate-pulse`}>
-              <span className="text-lg">{currentTargetInfo.icon}</span>
-              <span className={`font-heading font-black text-xs sm:text-sm tracking-widest ${currentTargetInfo.color}`}>
-                {currentTargetInfo.name} MASASI ({state?.tableTarget})
+          {/* Center Table Target Seal */}
+          <div className="relative z-10 flex flex-col items-center mb-1 text-center">
+            <div className={`px-3 py-1 rounded-full bg-black/80 border ${currentTargetInfo.border} shadow-md flex items-center gap-1.5`}>
+              <span className="text-sm">{currentTargetInfo.icon}</span>
+              <span className={`font-heading font-black text-xs sm:text-sm tracking-wider ${currentTargetInfo.color}`}>
+                {currentTargetInfo.name} {currentTargetInfo.suit} MASASI
               </span>
-              <span className="text-lg">{currentTargetInfo.icon}</span>
+              <span className="text-sm">{currentTargetInfo.icon}</span>
             </div>
-            <span className="text-[10px] text-emerald-400/80 font-bold mt-1">
-              Jokerler her kartın yerine geçer
+            <span className="text-[9px] text-emerald-400/80 font-bold mt-0.5">
+              Jokerler her kart yerine geçer
             </span>
           </div>
 
-          {/* Cards on the Table Pile or Reveal */}
-          <div className="relative z-10 flex items-center justify-center gap-2 min-h-[140px] sm:min-h-[170px] w-full px-4">
+          {/* CARDS ON THE TABLE OR REVEAL */}
+          <div className="relative z-10 flex items-center justify-center gap-2 min-h-[110px] sm:min-h-[130px] w-full px-2">
             {state?.status === 'revealing' && state?.lastReveal ? (
-              // REVEAL ANIMATION PHASE (Flipped Cards)
+              // REVEAL ANIMATION (Slow-motion flipped cards)
               <div className="flex flex-col items-center animate-fade-in w-full">
                 <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
                   {state.lastReveal.cards.map((c, idx) => {
@@ -337,8 +347,7 @@ export default function LiarsBarGame() {
                   })}
                 </div>
 
-                {/* Dramatic Reveal Callout */}
-                <div className={`mt-3 px-4 py-2 rounded-2xl text-xs sm:text-sm font-heading font-black tracking-wide text-center border shadow-xl animate-bounce ${
+                <div className={`mt-2 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-heading font-black tracking-wide text-center border shadow-xl animate-bounce ${
                   state.lastReveal.isBluff
                     ? 'bg-red-950/90 text-red-200 border-red-500 shadow-red-950/60'
                     : 'bg-emerald-950/90 text-emerald-200 border-emerald-500 shadow-emerald-950/60'
@@ -349,41 +358,57 @@ export default function LiarsBarGame() {
             ) : state?.lastPlay ? (
               // CARDS FACE DOWN IN THE MIDDLE
               <div className="flex flex-col items-center">
-                <div className="flex items-center justify-center gap-2 sm:gap-3">
+                <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                   {Array.from({ length: state.lastPlay.cardCount }).map((_, idx) => (
                     <div
                       key={idx}
-                      className="w-20 h-28 sm:w-24 sm:h-34 rounded-xl overflow-hidden shadow-2xl shadow-black border border-amber-600/60 animate-pop"
-                      style={{ transform: `rotate(${(idx - 1) * 6}deg)` }}
+                      className="w-16 h-24 sm:w-20 sm:h-28 rounded-xl overflow-hidden shadow-2xl shadow-black border border-amber-600/70 animate-pop"
+                      style={{ transform: `rotate(${(idx - (state.lastPlay.cardCount - 1) / 2) * 8}deg)` }}
                     >
                       <CardBackIllustration />
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-2.5 px-3 py-1 rounded-xl bg-black/80 text-stone-200 text-xs font-bold border border-stone-700/80 shadow-md flex items-center gap-1.5">
+                <div className="mt-2 px-3 py-1 rounded-xl bg-black/80 text-stone-200 text-xs font-bold border border-stone-700/80 shadow-md flex items-center gap-1.5">
                   <span className="text-amber-400 font-black">{state.lastPlay.playerName}</span>
                   <span>{state.lastPlay.cardCount} adet {currentTargetInfo.name} attı</span>
                 </div>
               </div>
             ) : (
-              // Table Empty
-              <div className="text-center text-stone-600 font-heading font-bold text-xs sm:text-sm italic">
-                Masa temiz. İlk kartları oynayın!
+              <div className="text-center text-stone-600 font-heading font-bold text-xs italic">
+                Masa temiz. İlk kartları sürün!
               </div>
             )}
           </div>
+
+          {/* FLYING CARDS ANIMATION LAYER (Smooth slide from hand to table!) */}
+          {flyingCards && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-30">
+              <div className="flex gap-2 animate-throw-cards">
+                {Array.from({ length: flyingCards.count }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="w-16 h-24 sm:w-20 sm:h-28 rounded-xl overflow-hidden shadow-2xl border-2 border-amber-400"
+                    style={{ transform: `rotate(${(idx - 1) * 6}deg)` }}
+                  >
+                    <CardBackIllustration />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Turn Status Message Banner */}
-        <div className="w-full max-w-xl my-3 text-center z-20">
+        <div className="w-full max-w-lg my-1 text-center z-20 shrink-0">
           {isMyTurn ? (
-            <div className="py-2 px-4 rounded-2xl bg-amber-500/20 text-amber-300 font-heading font-black text-xs sm:text-sm border border-amber-500/40 shadow-lg shadow-amber-500/10 animate-pulse flex items-center justify-center gap-2">
+            <div className="py-1.5 px-4 rounded-xl bg-amber-500/20 text-amber-300 font-heading font-black text-xs sm:text-sm border border-amber-500/40 shadow-md animate-pulse flex items-center justify-center gap-2">
               <Zap className="w-4 h-4 text-amber-400" />
               <span>SIRA SİZDE! 1-3 kart seçip masaya sürün veya "YALANCI!" deyin!</span>
             </div>
           ) : (
-            <div className="py-1.5 px-4 rounded-xl bg-stone-900/70 text-stone-400 text-xs font-bold border border-stone-800 flex items-center justify-center gap-2">
+            <div className="py-1 px-4 rounded-xl bg-stone-900/70 text-stone-400 text-xs font-bold border border-stone-800 flex items-center justify-center gap-2">
               <Clock className="w-3.5 h-3.5 text-stone-500 animate-spin" />
               <span>
                 Sıra <strong className="text-white">{state?.players?.find(p => p.id === state?.currentTurnPlayerId)?.name}</strong>'da...
@@ -393,11 +418,11 @@ export default function LiarsBarGame() {
         </div>
 
         {/* Self Player Hand and Action Controls Area */}
-        <div className="w-full flex flex-col items-center z-20 pb-2">
+        <div className="w-full flex flex-col items-center z-20 shrink-0">
           {/* Own Cards in Hand */}
-          <div className="flex items-end justify-center gap-2 sm:gap-3.5 mb-3 flex-wrap">
+          <div className="flex items-end justify-center gap-1.5 sm:gap-3 mb-2 flex-wrap">
             {myHand.length === 0 ? (
-              <div className="text-xs text-stone-500 italic p-3">
+              <div className="text-xs text-stone-500 italic p-2">
                 {selfPlayer?.isAlive === false ? '💀 Elendiniz. Maçı canlı izliyorsunuz.' : 'Elinizde kart kalmadı.'}
               </div>
             ) : (
@@ -427,7 +452,7 @@ export default function LiarsBarGame() {
                 type="button"
                 onClick={handlePlayCards}
                 disabled={!isMyTurn || selectedCardIds.length === 0}
-                className={`flex-1 py-3 px-5 rounded-2xl font-heading font-black text-xs sm:text-sm tracking-wider uppercase transition shadow-lg flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2.5 sm:py-3 px-4 rounded-2xl font-heading font-black text-xs sm:text-sm tracking-wider uppercase transition shadow-lg flex items-center justify-center gap-2 ${
                   isMyTurn && selectedCardIds.length > 0
                     ? 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-black shadow-amber-500/25 active:scale-95 cursor-pointer'
                     : 'bg-stone-800 text-stone-500 cursor-not-allowed border border-stone-700/60'
@@ -447,7 +472,7 @@ export default function LiarsBarGame() {
                   type="button"
                   onClick={handleChallenge}
                   disabled={!isMyTurn}
-                  className={`py-3 px-6 rounded-2xl font-heading font-black text-xs sm:text-sm tracking-widest uppercase transition shadow-lg flex items-center justify-center gap-2 border ${
+                  className={`py-2.5 sm:py-3 px-5 sm:px-6 rounded-2xl font-heading font-black text-xs sm:text-sm tracking-widest uppercase transition shadow-lg flex items-center justify-center gap-2 border ${
                     isMyTurn
                       ? 'bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white border-red-500 shadow-red-600/40 animate-pulse active:scale-95 cursor-pointer'
                       : 'bg-stone-800/80 text-stone-500 border-stone-700/60 cursor-not-allowed'
@@ -472,8 +497,8 @@ export default function LiarsBarGame() {
         />
       )}
 
-      {/* Game Over Modal */}
-      {state?.status === 'game_over' && (
+      {/* Game Over Modal (Smoothly delayed until explosion subsides) */}
+      {showGameOverModal && state?.winner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
           <div className="w-full max-w-md bg-stone-900 rounded-3xl border-2 border-amber-500/80 shadow-2xl p-6 text-center text-white">
             <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 mx-auto flex items-center justify-center text-3xl mb-3 border border-amber-500/40">
@@ -509,13 +534,6 @@ export default function LiarsBarGame() {
           </div>
         </div>
       )}
-
-      {/* Live Chat Drawer */}
-      <LiveChat
-        isOpen={chatOpen}
-        onClose={() => setChatOpen(false)}
-        messages={chatMessages}
-      />
     </div>
   );
 }

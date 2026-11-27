@@ -666,31 +666,34 @@ io.on('connection', (socket) => {
     broadcastLiarsBarState(room);
     if (typeof callback === 'function') callback({ success: true, result: result.result });
 
-    // If game over (only 1 player survived)
-    if (result.result.gameOver) {
-      room.gameState = 'game_over';
-      io.to(room.code).emit('liars_game_over', {
-        winner: result.result.winner,
-        room
-      });
-      return;
-    }
+    // Allow full dramatic explosion, camera shake, fireball and red flash to play out:
+    // Safe wire: 2.5s delay
+    // Explosive wire: 5.0s delay before transitioning to game over or next round
+    const delayMs = result.result.isExplosion ? 5000 : 2500;
 
-    // If safe wire: 2.5s delay then start next round.
-    // If exploded: 4.5s delay to let camera shake/fireball/cracks play out before next round.
-    const delayMs = result.result.isExplosion ? 4500 : 2500;
     setTimeout(() => {
       const roomRef = getRoom(room.code);
-      if (roomRef && roomRef.liarsBarSession && roomRef.liarsBarSession.status === 'bomb_defusal') {
+      if (!roomRef || !roomRef.liarsBarSession) return;
+
+      if (result.result.gameOver) {
+        roomRef.gameState = 'game_over';
+        roomRef.liarsBarSession.status = 'game_over';
+        io.to(roomRef.code).emit('liars_game_over', {
+          winner: result.result.winner,
+          room: roomRef
+        });
+        broadcastLiarsBarState(roomRef);
+      } else if (roomRef.liarsBarSession.status === 'bomb_defusal') {
         const nextRes = roomRef.liarsBarSession.proceedAfterBomb();
         if (nextRes.gameOver) {
           roomRef.gameState = 'game_over';
-          io.to(room.code).emit('liars_game_over', {
+          io.to(roomRef.code).emit('liars_game_over', {
             winner: nextRes.winner,
             room: roomRef
           });
+          broadcastLiarsBarState(roomRef);
         } else {
-          io.to(room.code).emit('liars_new_round', {
+          io.to(roomRef.code).emit('liars_new_round', {
             roundNumber: roomRef.liarsBarSession.roundNumber,
             tableTarget: roomRef.liarsBarSession.tableTarget
           });

@@ -331,9 +331,9 @@ export class LiarsBarSession {
       const aliveRemaining = this.getAlivePlayers();
       player.eliminatedRank = aliveRemaining.length + 1;
 
-      // Check if only 1 alive player remains
+      // Note: We keep status as 'bomb_defusal' so players can experience
+      // the full 5-second explosion animation before transitioning to 'game_over'.
       if (aliveRemaining.length <= 1) {
-        this.status = 'game_over';
         this.winner = aliveRemaining[0] || null;
       }
     }
@@ -345,7 +345,7 @@ export class LiarsBarSession {
       wireColor: wire.color,
       isExplosion,
       isAlive: player.isAlive,
-      gameOver: this.status === 'game_over',
+      gameOver: Boolean(this.winner),
       winner: this.winner ? { id: this.winner.id, name: this.winner.name, avatar: this.winner.avatar } : null
     };
 

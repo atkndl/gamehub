@@ -22,6 +22,7 @@ export default function BombDefusalModal({
   const [cutAnimWireId, setCutAnimWireId] = useState(null);
   const [screenShake, setScreenShake] = useState(false);
   const [whiteFlash, setWhiteFlash] = useState(false);
+  const [redStrobe, setRedStrobe] = useState(false);
   const [crackedGlass, setCrackedGlass] = useState(false);
 
   // Heartbeat sound loop during bomb defusal
@@ -39,16 +40,17 @@ export default function BombDefusalModal({
     setCutAnimWireId(wireCutResult.wireId);
 
     if (wireCutResult.isExplosion) {
-      // Trigger Explosion Sequence!
+      // Trigger Catastrophic Explosion Sequence!
       liarsAudio.playExplosion();
       setWhiteFlash(true);
       setScreenShake(true);
+      setRedStrobe(true);
       setCrackedGlass(true);
 
       spawnExplosionParticles();
 
-      setTimeout(() => setWhiteFlash(false), 250);
-      setTimeout(() => setScreenShake(false), 1400);
+      setTimeout(() => setWhiteFlash(false), 300);
+      setTimeout(() => setScreenShake(false), 3800);
     } else {
       // Trigger Safe Wire Snip!
       liarsAudio.playWireSnip();
@@ -230,6 +232,27 @@ export default function BombDefusalModal({
       {/* Blinding White Flash */}
       {whiteFlash && (
         <div className="fixed inset-0 z-60 bg-white transition-opacity duration-150 pointer-events-none" />
+      )}
+
+      {/* Full-Screen Danger Red Flashing Filter */}
+      {redStrobe && (
+        <div className="fixed inset-0 z-56 bg-red-600/35 mix-blend-color-burn pointer-events-none animate-pulse" />
+      )}
+
+      {/* Explosion Elimination Callout Banner */}
+      {wireCutResult?.isExplosion && (
+        <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-70 flex flex-col items-center justify-center p-6 sm:p-8 bg-red-950/95 border-4 border-red-600 rounded-3xl shadow-2xl shadow-red-950 text-center animate-bounce-subtle pointer-events-none max-w-lg mx-auto">
+          <div className="text-6xl mb-2 animate-bounce">💥</div>
+          <h2 className="font-heading font-black text-2xl sm:text-3xl text-white tracking-widest uppercase mb-1 drop-shadow-md">
+            BOMBA İNFİLAK ETTİ!
+          </h2>
+          <p className="font-heading font-black text-lg sm:text-xl text-amber-400">
+            {penalizedPlayer?.name} ELENDİ! 💀
+          </p>
+          <span className="text-xs text-red-200 mt-2 font-mono">
+            {isMyPenalty ? 'Masadan elendiniz...' : 'Kalan oyuncularla oyun devam edecek...'}
+          </span>
+        </div>
       )}
 
       {/* Cracked Glass Vignette on Explosion */}
