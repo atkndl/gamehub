@@ -700,6 +700,34 @@ export default function SurvivalHUD({
               </div>
             </button>
 
+            {/* Slot 4: Tactical Grenade */}
+            <button
+              type="button"
+              onClick={() => onSwitchSlot('grenade')}
+              className={`p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[85px] sm:min-w-[95px] relative overflow-hidden ${
+                myPlayer.activeSlot === 'grenade'
+                  ? 'bg-amber-600/30 border-2 border-amber-400 shadow-xl shadow-amber-500/30 ring-2 ring-amber-400/40 animate-pulse'
+                  : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600'
+              }`}
+              title="El Bombası [Tuş: G]"
+            >
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
+                <span>[G] BOMBA</span>
+                <img
+                  src="/assets/survival/grenade.svg"
+                  alt="grenade"
+                  className="w-4 h-4 object-contain"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              </div>
+              <div className="font-heading font-black text-sm sm:text-base text-white flex items-center justify-between">
+                <span className="text-xl">💣</span>
+                <span className={`font-mono font-black ${myPlayer.grenades > 0 ? 'text-amber-400' : 'text-slate-500'}`}>
+                  x{myPlayer.grenades || 0}
+                </span>
+              </div>
+            </button>
+
             {/* Quick Reload Button */}
             {activeWeapon && !activeWeapon.isMelee && (
               <button

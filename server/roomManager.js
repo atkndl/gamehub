@@ -827,15 +827,46 @@ export function advanceScoreModeRound(roomCode) {
 }
 
 export function restartGame(socketId) {
-  const room = getRoomBySocket(socketId);
-  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
+  let room = getRoomBySocket(socketId);
+  if (!room) {
+    for (const r of rooms.values()) {
+      if (r.hostId === socketId || r.players.some(p => p.id === socketId)) {
+        room = r;
+        break;
+      }
+    }
+  }
+  if (!room) return { error: 'Oda bulunamadı.' };
+
+  const player = room.players.find(p => p.id === socketId);
+  const isHost = (room.hostId === socketId) || (player && player.isHost) || (room.players.length > 0 && room.players[0].id === socketId) || (room.players.length <= 1);
+  if (!isHost) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
+
+  room.hostId = socketId;
+  if (player) player.isHost = true;
 
   return startWordleGame(socketId);
 }
 
 export function returnToLobby(socketId) {
-  const room = getRoomBySocket(socketId);
-  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi lobiye dönebilir.' };
+  let room = getRoomBySocket(socketId);
+  if (!room) {
+    for (const r of rooms.values()) {
+      if (r.hostId === socketId || r.players.some(p => p.id === socketId)) {
+        room = r;
+        break;
+      }
+    }
+  }
+  if (!room) return { error: 'Oda bulunamadı.' };
+
+  const player = room.players.find(p => p.id === socketId);
+  const isHost = (room.hostId === socketId) || (player && player.isHost) || (room.players.length > 0 && room.players[0].id === socketId) || (room.players.length <= 1);
+  if (!isHost) return { error: 'Sadece oda sahibi lobiye dönebilir.' };
+
+  // Re-sync hostId and isHost to current socket
+  room.hostId = socketId;
+  if (player) player.isHost = true;
 
   room.gameState = 'lobby';
   room.wordleSession = null;
@@ -900,9 +931,42 @@ export function updateSurvivalConfig(socketId, config) {
   return room;
 }
 
+export function verifyHost(socketId) {
+  let room = getRoomBySocket(socketId);
+  if (!room) {
+    for (const r of rooms.values()) {
+      if (r.hostId === socketId || (r.players && r.players.some(p => p.id === socketId))) {
+        room = r;
+        break;
+      }
+    }
+  }
+  if (!room) return { error: 'Oda bulunamadı.' };
+
+  const player = room.players.find(p => p.id === socketId);
+  const isHost = (room.hostId === socketId) ||
+                 (player && player.isHost) ||
+                 (room.players.length > 0 && room.players[0].id === socketId) ||
+                 (room.players.length <= 1);
+
+  if (!isHost) {
+    return { error: 'Sadece oda sahibi bu işlemi yapabilir.' };
+  }
+
+  // Synchronize host tracking to avoid any mismatch
+  room.hostId = socketId;
+  if (player) player.isHost = true;
+  room.players.forEach(p => {
+    if (p.id !== socketId && p.isHost) p.isHost = false;
+  });
+
+  return { room, player };
+}
+
 export function startSurvivalGame(socketId) {
-  const room = getRoomBySocket(socketId);
-  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu başlatabilir.' };
+  const check = verifyHost(socketId);
+  if (check.error) return check;
+  const room = check.room;
 
   room.selectedGame = 'survival';
   room.gameState = 'playing';
@@ -917,16 +981,17 @@ export function handleSurvivalInput(socketId, data) {
 }
 
 export function restartSurvivalGame(socketId) {
-  const room = getRoomBySocket(socketId);
-  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
+  const check = verifyHost(socketId);
+  if (check.error) return check;
   return startSurvivalGame(socketId);
 }
 
 // ==================== LIAR'S BAR (BLÖF) ====================
 
 export function startLiarsBarGame(socketId) {
-  const room = getRoomBySocket(socketId);
-  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu başlatabilir.' };
+  const check = verifyHost(socketId);
+  if (check.error) return check;
+  const room = check.room;
   if (room.players.length < 2) return { error: "Liar's Bar oyunu en az 2 oyuncu gerektirir!" };
 
   room.selectedGame = 'liars_bar';
@@ -936,8 +1001,8 @@ export function startLiarsBarGame(socketId) {
 }
 
 export function restartLiarsBarGame(socketId) {
-  const room = getRoomBySocket(socketId);
-  if (!room || room.hostId !== socketId) return { error: 'Sadece oda sahibi oyunu yeniden başlatabilir.' };
+  const check = verifyHost(socketId);
+  if (check.error) return check;
   return startLiarsBarGame(socketId);
 }
 

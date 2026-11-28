@@ -8,6 +8,7 @@ const LOOT_IMAGE_URLS = {
   m4a1: '/assets/survival/m4a1.svg',
   mosin: '/assets/survival/mosin.svg',
   mp5: '/assets/survival/mp5.svg',
+  grenade: '/assets/survival/grenade.svg',
   medkit: '/assets/survival/medkit.svg',
   bandage: '/assets/survival/bandage.svg',
   soda: '/assets/survival/soda.svg',
@@ -17,7 +18,7 @@ const LOOT_IMAGE_URLS = {
   '15x': '/assets/survival/scope15x.svg'
 };
 
-export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, onShoot, onStopShoot }) {
+export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, onShoot, onStopShoot, onAction }) {
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
   const stateRef = useRef(state);
@@ -36,6 +37,31 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
   const prevCrateHpRef = useRef({});
   const prevCratePosRef = useRef({});
   const lootImagesRef = useRef({});
+
+  // Grenade Cooking & Aim Slingshot Refs
+  const isCookingGrenadeRef = useRef(false);
+  const grenadeCookStartTimeRef = useRef(0);
+  const grenadeMousePosRef = useRef({ x: 0, y: 0 });
+
+  // Anti-zoom exploit keyboard & mousewheel protection
+  useEffect(() => {
+    const handleKeyZoom = (e) => {
+      if ((e.ctrlKey || e.metaKey) && ['-', '=', '+', '_', '0'].includes(e.key)) {
+        e.preventDefault();
+      }
+    };
+    const handleWheelZoom = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyZoom, { passive: false });
+    window.addEventListener('wheel', handleWheelZoom, { passive: false });
+    return () => {
+      window.removeEventListener('keydown', handleKeyZoom);
+      window.removeEventListener('wheel', handleWheelZoom);
+    };
+  }, []);
 
   // Preload procedural SVG images for crisp ground loot rendering
   useEffect(() => {
@@ -58,7 +84,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
     }
   }, []);
 
-  // Handle Mouse Aiming & Shooting
+  // Handle Mouse Aiming & Shooting & Grenade Slingshot
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -67,6 +93,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
+      grenadeMousePosRef.current = { x: mouseX, y: mouseY };
 
       // In camera-centered coordinate system, player is at screen center!
       const centerX = rect.width / 2;
@@ -77,12 +104,42 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
 
     const handleMouseDown = (e) => {
       if (e.button === 0) {
+        const curMyPlayer = stateRef.current?.players?.find(p => p.id === myPlayerIdRef.current);
+        if (curMyPlayer?.activeSlot === 'grenade') {
+          if ((curMyPlayer.grenades || 0) > 0) {
+            isCookingGrenadeRef.current = true;
+            grenadeCookStartTimeRef.current = Date.now();
+            return;
+          }
+        }
         onShoot();
       }
     };
 
     const handleMouseUp = (e) => {
       if (e.button === 0) {
+        if (isCookingGrenadeRef.current) {
+          isCookingGrenadeRef.current = false;
+          const rect = canvas.getBoundingClientRect();
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          const dx = grenadeMousePosRef.current.x - centerX;
+          const dy = grenadeMousePosRef.current.y - centerY;
+          const dragDist = Math.hypot(dx, dy);
+          const angle = Math.atan2(dy, dx);
+
+          // Slingshot launch velocity proportional to aim drag distance
+          const speed = Math.min(22, Math.max(7, dragDist * 0.08));
+          const vx = Math.cos(angle) * speed;
+          const vy = Math.sin(angle) * speed;
+          const elapsed = (Date.now() - grenadeCookStartTimeRef.current) / 1000;
+          const fuseRemaining = Math.max(0.15, 3.0 - elapsed);
+
+          if (fuseRemaining > 0 && onAction) {
+            onAction({ action: 'throw_grenade', vx, vy, fuseRemaining });
+          }
+          return;
+        }
         onStopShoot();
       }
     };
@@ -102,7 +159,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       window.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [onAim, onShoot, onStopShoot]);
+  }, [onAim, onShoot, onStopShoot, onAction]);
 
   // Handle Canvas Rendering Loop - Continuous & Independent of React Re-renders
   useEffect(() => {
@@ -123,6 +180,18 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
 
       // Find my player in current server state
       const myPlayer = curState?.players?.find(p => p.id === curMyPlayerId);
+
+      // Check Grenade Cooking fuse timeout in hand!
+      if (isCookingGrenadeRef.current) {
+        const elapsed = (Date.now() - grenadeCookStartTimeRef.current) / 1000;
+        if (elapsed >= 3.0) {
+          // Explode in hand!
+          isCookingGrenadeRef.current = false;
+          if (onAction) {
+            onAction({ action: 'grenade_cook_explode' });
+          }
+        }
+      }
 
       // Real-time client-side water pond detection (instant response)
       const curPx = localPredictedRef.current.initialized ? localPredictedRef.current.x : (myPlayer?.x || 2100);
@@ -189,6 +258,20 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       const scopeKey = myPlayer?.scope || '1x';
       const zoom = SCOPES[scopeKey]?.zoom || 1.65;
 
+      // Anti-zoom exploit normalization: Keep visible map viewport invariant to window size / zoom
+      const refDiag = Math.hypot(1366, 768);
+      const screenDiag = Math.hypot(width, height);
+      const resolutionFactor = screenDiag / refDiag;
+      const effectiveZoom = zoom * Math.max(0.75, resolutionFactor);
+
+      // Viewport culling boundaries (only render what is visible + small buffer)
+      const halfW = (width / 2) / effectiveZoom + 120;
+      const halfH = (height / 2) / effectiveZoom + 120;
+      const minX = camX - halfW;
+      const maxX = camX + halfW;
+      const minY = camY - halfH;
+      const maxY = camY + halfH;
+
       // 1. Clear background
       ctx.fillStyle = '#0a0f1d';
       ctx.fillRect(0, 0, width, height);
@@ -196,9 +279,9 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       // Save base transform
       ctx.save();
 
-      // Camera transformation: Center on player, scale by zoom, translate to world
+      // Camera transformation: Center on player, scale by normalized effective zoom, translate to world
       ctx.translate(width / 2, height / 2);
-      ctx.scale(zoom, zoom);
+      ctx.scale(effectiveZoom, effectiveZoom);
       ctx.translate(-camX, -camY);
 
       const mapSize = curState?.mapSize || 4200;
@@ -211,16 +294,20 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
       ctx.lineWidth = 1;
       const gridSize = 100;
-      for (let x = 0; x <= mapSize; x += gridSize) {
+      const startGridX = Math.max(0, Math.floor(minX / gridSize) * gridSize);
+      const endGridX = Math.min(mapSize, Math.ceil(maxX / gridSize) * gridSize);
+      for (let x = startGridX; x <= endGridX; x += gridSize) {
         ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, mapSize);
+        ctx.moveTo(x, Math.max(0, minY));
+        ctx.lineTo(x, Math.min(mapSize, maxY));
         ctx.stroke();
       }
-      for (let y = 0; y <= mapSize; y += gridSize) {
+      const startGridY = Math.max(0, Math.floor(minY / gridSize) * gridSize);
+      const endGridY = Math.min(mapSize, Math.ceil(maxY / gridSize) * gridSize);
+      for (let y = startGridY; y <= endGridY; y += gridSize) {
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(mapSize, y);
+        ctx.moveTo(Math.max(0, minX), y);
+        ctx.lineTo(Math.min(mapSize, maxX), y);
         ctx.stroke();
       }
 
@@ -229,9 +316,11 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       ctx.lineWidth = 6;
       ctx.strokeRect(0, 0, mapSize, mapSize);
 
-      // 3. Render Water Ponds
+      // 3. Render Water Ponds (Culled)
       if (Array.isArray(curState?.ponds)) {
         curState.ponds.forEach(pond => {
+          if (pond.x + pond.radius < minX || pond.x - pond.radius > maxX || pond.y + pond.radius < minY || pond.y - pond.radius > maxY) return;
+
           ctx.save();
           // Sandy shoreline
           ctx.beginPath();
@@ -264,12 +353,14 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         });
       }
 
-      // 4. Render Ground Loot with Zoom-Compensated Scale & Crisp SVG Assets
+      // 4. Render Ground Loot with Zoom-Compensated Scale (Culled & Optimized - No expensive shadowBlur)
       if (Array.isArray(curState?.loot)) {
-        // As user zooms out with 4x, 8x, 15x scopes, scale up ground loot so it remains clearly visible
-        const zoomScale = Math.max(1.0, Math.min(2.8, 1.65 / zoom));
+        const zoomScale = Math.max(1.0, Math.min(2.8, 1.65 / effectiveZoom));
 
         curState.loot.forEach(item => {
+          // Viewport culling check
+          if (item.x < minX || item.x > maxX || item.y < minY || item.y > maxY) return;
+
           ctx.save();
           const bob = Math.sin(Date.now() / 250) * 2.5 * zoomScale;
 
@@ -285,15 +376,21 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             imgKey = `helmet_${item.level}`;
           } else if (item.type === 'vest' && item.level) {
             imgKey = `vest_${item.level}`;
+          } else if (item.type === 'grenade') {
+            imgKey = 'grenade';
           }
 
           const lootImg = imgKey ? lootImagesRef.current[imgKey] : null;
           const isLootLoaded = lootImg && lootImg.complete && lootImg.naturalWidth > 0;
 
-          // Glowing loot shadow
-          const glowColor = item.type === 'weapon' ? '#fbbf24' : (item.type === 'scope' ? '#a855f7' : (item.type === 'helmet' || item.type === 'vest' ? '#38bdf8' : '#10b981'));
-          ctx.shadowBlur = 14 * zoomScale;
-          ctx.shadowColor = glowColor;
+          // Crisp colored loot base ring (no expensive shadowBlur)
+          const glowColor = item.type === 'weapon'
+            ? '#fbbf24'
+            : (item.type === 'scope'
+                ? '#a855f7'
+                : (item.type === 'helmet' || item.type === 'vest'
+                    ? '#38bdf8'
+                    : (item.type === 'grenade' ? '#f97316' : '#10b981')));
 
           // Loot pedestal base
           const baseRadius = 20 * zoomScale;
@@ -302,13 +399,19 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
           ctx.fill();
           ctx.strokeStyle = glowColor;
-          ctx.lineWidth = 2 * zoomScale;
+          ctx.lineWidth = 2.5 * zoomScale;
+          ctx.stroke();
+
+          // Subtle outer halo ring
+          ctx.beginPath();
+          ctx.arc(item.x, item.y, baseRadius + 3.5 * zoomScale, 0, Math.PI * 2);
+          ctx.strokeStyle = `${glowColor}50`;
+          ctx.lineWidth = 1.5 * zoomScale;
           ctx.stroke();
 
           // Draw procedural asset image if loaded, otherwise fallback to emoji icon
           if (isLootLoaded) {
-            ctx.shadowBlur = 0;
-            const imgSize = (item.type === 'weapon' ? 38 : 28) * zoomScale;
+            const imgSize = (item.type === 'weapon' ? 38 : (item.type === 'grenade' ? 26 : 28)) * zoomScale;
             ctx.drawImage(
               lootImg,
               item.x - imgSize / 2,
@@ -320,15 +423,13 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             ctx.font = `${Math.round(18 * zoomScale)}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.shadowBlur = 0;
-            ctx.fillText(item.icon || '📦', item.x, item.y + bob);
+            ctx.fillText(item.icon || (item.type === 'grenade' ? '💣' : '📦'), item.x, item.y + bob);
           }
 
           // Name pill tag (high-contrast readable badge)
-          ctx.shadowBlur = 0;
           const tagFontSize = Math.max(9, Math.round(9 * zoomScale));
           ctx.font = `bold ${tagFontSize}px sans-serif`;
-          const text = item.name || '';
+          const text = item.name || (item.type === 'grenade' ? '💣 El Bombası' : '');
           const metrics = ctx.measureText(text);
           const padX = 6 * zoomScale;
           const padY = 3 * zoomScale;
@@ -355,9 +456,11 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         });
       }
 
-      // 5. Render Rectangular Obstacles (Crates, Shipping Containers, Buildings)
+      // 5. Render Rectangular Obstacles (Culled)
       if (Array.isArray(curState?.obstacles)) {
         curState.obstacles.forEach(ob => {
+          if (ob.x + ob.w < minX || ob.x > maxX || ob.y + ob.h < minY || ob.y > maxY) return;
+
           ctx.save();
 
           if (ob.type === 'crate') {
@@ -412,7 +515,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
               ctx.fillRect(drawX + 2, drawY - 9, (curW - 4) * hpRatio, 3.5);
             }
           } else if (ob.type === 'container') {
-            // Shipping Container (Corrugated metal box - BULLETS RICOCHET OFF THIS!)
+            // Shipping Container
             const color = ob.color || '#dc2626';
             ctx.fillStyle = color;
             ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
@@ -472,9 +575,11 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         });
       }
 
-      // 6. Render Circular Obstacles (Barrels, Rocks, Trees)
+      // 6. Render Circular Obstacles (Barrels, Rocks, Trees - Culled)
       if (Array.isArray(curState?.circularObstacles)) {
         curState.circularObstacles.forEach(cob => {
+          if (cob.x + cob.radius < minX || cob.x - cob.radius > maxX || cob.y + cob.radius < minY || cob.y - cob.radius > maxY) return;
+
           ctx.save();
 
           if (cob.type === 'barrel') {
@@ -536,15 +641,14 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         });
       }
 
-      // 7. Render Flying Glowing Bullets & Metallic Ricochet Trails
+      // 7. Render Flying Bullets (Optimized)
       if (Array.isArray(curState?.bullets)) {
         curState.bullets.forEach(b => {
+          if (b.x < minX || b.x > maxX || b.y < minY || b.y > maxY) return;
           ctx.save();
           ctx.beginPath();
           ctx.arc(b.x, b.y, b.hasRicocheted ? 4.5 : 3.5, 0, Math.PI * 2);
           ctx.fillStyle = b.hasRicocheted ? '#fef08a' : (b.color || '#fef08a');
-          ctx.shadowColor = b.hasRicocheted ? '#f59e0b' : (b.color || '#facc15');
-          ctx.shadowBlur = b.hasRicocheted ? 12 : 8;
           ctx.fill();
 
           // Tracer line
@@ -558,7 +662,59 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         });
       }
 
-      // 8. Render Players
+      // 7b. Render Thrown Flying Grenades (Airborne / Bouncing with fuse sparks)
+      if (Array.isArray(curState?.thrownGrenades)) {
+        curState.thrownGrenades.forEach(g => {
+          if (g.x < minX || g.x > maxX || g.y < minY || g.y > maxY) return;
+
+          ctx.save();
+          ctx.translate(g.x, g.y);
+
+          // Subtle shadow on ground
+          ctx.beginPath();
+          ctx.ellipse(3, 4, 8, 5, 0, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+          ctx.fill();
+
+          // Spinning rotation
+          const spin = ((Date.now() - (g.createdAt || 0)) / 80) % (Math.PI * 2);
+          ctx.rotate(spin);
+
+          const grImg = lootImagesRef.current['grenade'];
+          if (grImg && grImg.complete && grImg.naturalWidth > 0) {
+            ctx.drawImage(grImg, -11, -11, 22, 22);
+          } else {
+            ctx.font = '16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('💣', 0, 0);
+          }
+
+          // Blinking red fuse LED & spark
+          const fuseFlash = Math.sin(Date.now() / 60) > 0;
+          ctx.beginPath();
+          ctx.arc(0, -9, 3, 0, Math.PI * 2);
+          ctx.fillStyle = fuseFlash ? '#ef4444' : '#f59e0b';
+          ctx.fill();
+
+          // Smoke spark trails
+          if (Math.random() < 0.35) {
+            sparksRef.current.push({
+              x: g.x + (Math.random() - 0.5) * 6,
+              y: g.y - 8,
+              vx: (Math.random() - 0.5) * 1.5,
+              vy: -1 - Math.random() * 2,
+              size: 2.5,
+              color: '#f97316',
+              life: 0.5
+            });
+          }
+
+          ctx.restore();
+        });
+      }
+
+      // 8. Render Players & Cloud / Bush Camouflage
       if (Array.isArray(curState?.players)) {
         curState.players.forEach(p => {
           if (!p.isAlive) return;
@@ -614,7 +770,21 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             }
           }
 
-          if (insideBush && !isSelf) {
+          // Check if player is concealed under a moving fog cloud
+          let insideCloud = Boolean(p.inCloud);
+          if (!insideCloud && Array.isArray(curState?.clouds)) {
+            for (const cloud of curState.clouds) {
+              const dx = renderX - cloud.x;
+              const dy = renderY - cloud.y;
+              if (dx * dx + dy * dy < cloud.radius * cloud.radius * 0.95) {
+                insideCloud = true;
+                break;
+              }
+            }
+          }
+
+          // Stealth Rule: If concealed under cloud or inside bush, enemies cannot see the player unless they shoot!
+          if ((insideBush || insideCloud) && !isSelf) {
             if (!p.isShooting) return;
           }
 
@@ -622,8 +792,8 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           ctx.translate(renderX, renderY);
           ctx.rotate(renderAngle);
 
-          if (insideBush && isSelf) {
-            ctx.globalAlpha = 0.55;
+          if ((insideBush || insideCloud) && isSelf) {
+            ctx.globalAlpha = 0.50; // Semi-transparent stealth indicator for self
           }
 
           // If in water, draw swimming/wading ripple ring around player
@@ -635,11 +805,43 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             ctx.stroke();
           }
 
-          // Hands & Weapon
-          const active = p.weapons[p.activeSlot];
+          // Hands & Weapon / Melee / Grenade
+          const active = p.weapons ? p.weapons[p.activeSlot] : null;
+          const isGrenadeSlot = p.activeSlot === 'grenade';
           const isMelee = !active || active.isMelee;
 
-          if (isMelee) {
+          if (isGrenadeSlot) {
+            // Holding Tactical Grenade
+            ctx.beginPath();
+            ctx.arc(14, -10, 7.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fill();
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(18, 6, 7.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fill();
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Grenade body held in hands
+            ctx.beginPath();
+            ctx.arc(20, 0, 7.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#166534';
+            ctx.fill();
+            ctx.strokeStyle = '#14532d';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('💣', 20, 0);
+          } else if (isMelee) {
             const punchOffset = p.isPunching ? 14 : 0;
             const rightHandX = 14 + (p.lastMeleePunchHand === 1 ? punchOffset : 0);
             const leftHandX = 14 + (p.lastMeleePunchHand === -1 ? punchOffset : 0);
@@ -778,8 +980,6 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           ctx.font = 'bold 11px sans-serif';
           ctx.textAlign = 'center';
           ctx.fillStyle = '#ffffff';
-          ctx.shadowBlur = 4;
-          ctx.shadowColor = '#000000';
           ctx.fillText(`${p.avatar || ''} ${p.name}`, renderX, renderY - p.radius - 16);
 
           // Small HP Bar overhead
@@ -792,12 +992,109 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           ctx.fillRect(renderX - hpWidth / 2, renderY - p.radius - 12, hpWidth * hpRatio, hpHeight);
 
           ctx.restore();
+
+          // --- GRENADE SLINGSHOT TRAJECTORY & 3.0s COOKING COUNTDOWN ---
+          if (isSelf && isCookingGrenadeRef.current) {
+            const elapsed = (Date.now() - grenadeCookStartTimeRef.current) / 1000;
+            const fuseSec = Math.max(0, 3.0 - elapsed);
+            const rect = canvas.getBoundingClientRect();
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const dx = grenadeMousePosRef.current.x - centerX;
+            const dy = grenadeMousePosRef.current.y - centerY;
+            const dragDist = Math.hypot(dx, dy);
+            const aimAng = Math.atan2(dy, dx);
+            const launchSpeed = Math.min(22, Math.max(7, dragDist * 0.08));
+
+            // Dotted Slingshot Flight Path Trajectory
+            ctx.save();
+            ctx.setLineDash([7, 7]);
+            ctx.strokeStyle = fuseSec > 1.2 ? '#f59e0b' : '#ef4444';
+            ctx.lineWidth = 3;
+
+            let simX = renderX;
+            let simY = renderY;
+            let simVx = Math.cos(aimAng) * launchSpeed;
+            let simVy = Math.sin(aimAng) * launchSpeed;
+
+            ctx.beginPath();
+            ctx.moveTo(simX, simY);
+            const steps = Math.min(50, Math.round(fuseSec * 22));
+            for (let step = 0; step < steps; step++) {
+              simX += simVx;
+              simY += simVy;
+              simVx *= 0.94;
+              simVy *= 0.94;
+              ctx.lineTo(simX, simY);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Landing Impact Area Preview Circle (Radius: 230)
+            ctx.beginPath();
+            ctx.arc(simX, simY, 230, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+            ctx.fill();
+
+            // Landing marker crosshair
+            ctx.beginPath();
+            ctx.arc(simX, simY, 12, 0, Math.PI * 2);
+            ctx.fillStyle = '#ef4444';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            // Cooking Countdown Ring around Player
+            const cookProgress = Math.min(1, elapsed / 3.0);
+            ctx.beginPath();
+            ctx.arc(renderX, renderY, p.radius + 15, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(
+              renderX,
+              renderY,
+              p.radius + 15,
+              -Math.PI / 2,
+              -Math.PI / 2 + Math.PI * 2 * (1 - cookProgress)
+            );
+            ctx.strokeStyle = fuseSec > 1.2 ? '#f59e0b' : '#ef4444';
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // Big Bold Fuse Seconds text
+            ctx.font = '900 17px "Inter", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 4;
+            const fuseText = `${fuseSec.toFixed(1)}s`;
+            ctx.strokeText(fuseText, renderX, renderY - p.radius - 28);
+            ctx.fillStyle = fuseSec > 1.2 ? '#fef08a' : '#ef4444';
+            ctx.fillText(fuseText, renderX, renderY - p.radius - 28);
+
+            // Warning Banner
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillStyle = '#ef4444';
+            ctx.fillText('⚠️ PİM ÇEKİLDİ! FIRLAT!', renderX, renderY - p.radius - 44);
+
+            ctx.restore();
+          }
         });
       }
 
-      // 9. Render Soft Bushes (Players inside are camouflaged)
+      // 9. Render Soft Bushes (Players inside are camouflaged - Culled)
       if (Array.isArray(curState?.bushes)) {
         curState.bushes.forEach(b => {
+          if (b.x + b.radius < minX || b.x - b.radius > maxX || b.y + b.radius < minY || b.y - b.radius > maxY) return;
+
           ctx.save();
           ctx.beginPath();
           ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
@@ -808,6 +1105,49 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           ctx.arc(b.x + b.radius * 0.2, b.y - b.radius * 0.2, b.radius * 0.6, 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(34, 197, 94, 0.4)';
           ctx.fill();
+
+          ctx.restore();
+        });
+      }
+
+      // 9b. Render Drifting Volumetric Fog Clouds (Overhead Stealth Layer - Culled)
+      if (Array.isArray(curState?.clouds)) {
+        curState.clouds.forEach(c => {
+          if (c.x + c.radius < minX || c.x - c.radius > maxX || c.y + c.radius < minY || c.y - c.radius > maxY) return;
+
+          ctx.save();
+          // Soft multi-layered cloud puff circles
+          const cloudGrad = ctx.createRadialGradient(c.x, c.y, c.radius * 0.15, c.x, c.y, c.radius);
+          cloudGrad.addColorStop(0, 'rgba(241, 245, 249, 0.90)');
+          cloudGrad.addColorStop(0.55, 'rgba(226, 232, 240, 0.72)');
+          cloudGrad.addColorStop(0.85, 'rgba(203, 213, 225, 0.40)');
+          cloudGrad.addColorStop(1, 'rgba(203, 213, 225, 0)');
+
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+          ctx.fillStyle = cloudGrad;
+          ctx.fill();
+
+          // Sub-puffs around cloud center for volumetric realism
+          const subPuffs = [
+            { ox: -0.38, oy: -0.22, r: 0.65 },
+            { ox: 0.35, oy: -0.28, r: 0.62 },
+            { ox: -0.22, oy: 0.35, r: 0.68 },
+            { ox: 0.38, oy: 0.24, r: 0.60 }
+          ];
+          for (const sp of subPuffs) {
+            const px = c.x + c.radius * sp.ox;
+            const py = c.y + c.radius * sp.oy;
+            const pr = c.radius * sp.r;
+            const pGrad = ctx.createRadialGradient(px, py, pr * 0.1, px, py, pr);
+            pGrad.addColorStop(0, 'rgba(248, 250, 252, 0.85)');
+            pGrad.addColorStop(0.65, 'rgba(226, 232, 240, 0.52)');
+            pGrad.addColorStop(1, 'rgba(226, 232, 240, 0)');
+            ctx.beginPath();
+            ctx.arc(px, py, pr, 0, Math.PI * 2);
+            ctx.fillStyle = pGrad;
+            ctx.fill();
+          }
 
           ctx.restore();
         });
@@ -932,7 +1272,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       // Restore camera transform
       ctx.restore();
 
-      // --- FULL-SCREEN OVERLAYS (Wet Vignette, Damage Red Flash & Zone Danger Alert) ---
+      // --- FULL-SCREEN OVERLAYS (Wet Vignette, Fog Mist, Damage Red Flash & Zone Danger Alert) ---
       // 1. Wet Blue Screen Tint, Vignette & Water Droplets (when wading or soaked)
       if (localIsWet) {
         const wetAlpha = inWaterFinal ? 0.55 : 0.35;
@@ -970,6 +1310,24 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         ctx.restore();
       }
 
+      // 1b. Atmospheric Fog Overlay when Local Player is inside a Drifting Cloud (Stealth Mist)
+      if (myPlayer?.inCloud) {
+        const fogGrad = ctx.createRadialGradient(width / 2, height / 2, width * 0.15, width / 2, height / 2, width * 0.70);
+        fogGrad.addColorStop(0, 'rgba(226, 232, 240, 0.04)');
+        fogGrad.addColorStop(0.55, 'rgba(203, 213, 225, 0.32)');
+        fogGrad.addColorStop(1, 'rgba(148, 163, 184, 0.65)');
+        ctx.fillStyle = fogGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        // Stealth badge indicator
+        ctx.save();
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText('☁️ SİS İÇİNDESİN (DÜŞMANLAR SENİ GÖREMEZ)', width / 2, height - 120);
+        ctx.restore();
+      }
+
       // 2. Full-Screen Red Damage Flash Vignette
       if (damageFlashRef.current > 0.01) {
         const dmgGrad = ctx.createRadialGradient(width / 2, height / 2, width * 0.2, width / 2, height / 2, width * 0.75);
@@ -982,10 +1340,10 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         damageFlashRef.current = Math.max(0, damageFlashRef.current - 0.022);
       }
 
-      // 2b. Low HP Pulsing Blood Vignette & Danger Alert (Can azaldığında kaçırılmayacak net kırmızı efekt!)
+      // 2b. Low HP Pulsing Blood Vignette & Danger Alert
       if (myPlayer && myPlayer.isAlive && myPlayer.hp <= 45) {
         const hpRatio = 1 - Math.max(0, myPlayer.hp / 45); // 0 at 45hp, 1 at 0hp
-        const heartbeat = Math.sin(Date.now() / 180) * 0.5 + 0.5; // Hızlı nabız
+        const heartbeat = Math.sin(Date.now() / 180) * 0.5 + 0.5; // Quick pulse
         const alpha = Math.min(0.78, 0.22 + hpRatio * 0.34 + heartbeat * 0.22);
 
         const bloodGrad = ctx.createRadialGradient(
@@ -1120,7 +1478,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       running = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, []); // Run continuous animation loop once on mount!
+  }, [onAction]); // Run continuous animation loop
 
   // Dynamic canvas resizing
   useEffect(() => {

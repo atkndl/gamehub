@@ -14,7 +14,8 @@ export default function SurvivalGame() {
     survivalState,
     survivalGameOverData,
     sendSurvivalInput,
-    returnToLobby
+    returnToLobby,
+    leaveRoom
   } = useGame();
 
   const [killfeed, setKillfeed] = useState([]);
@@ -76,7 +77,7 @@ export default function SurvivalGame() {
       return;
     }
 
-    // Number keys 1, 2, 3 for weapon slots
+    // Number keys 1, 2, 3 for weapon slots, G for grenade
     if (code === 'Digit1' || code === 'Numpad1' || key === '1') {
       e.preventDefault();
       sendInputWithAction({ action: 'switch_slot', slot: 'primary' });
@@ -86,6 +87,11 @@ export default function SurvivalGame() {
     } else if (code === 'Digit3' || code === 'Numpad3' || key === '3') {
       e.preventDefault();
       sendInputWithAction({ action: 'switch_slot', slot: 'melee' });
+    } else if (code === 'KeyG' || key === 'g') {
+      e.preventDefault();
+      const myPlayer = survivalState?.players?.find(p => p.id === player?.id);
+      const targetSlot = myPlayer?.activeSlot === 'grenade' ? 'primary' : 'grenade';
+      sendInputWithAction({ action: 'switch_slot', slot: targetSlot });
     } else if (code === 'KeyR' || key === 'r') {
       e.preventDefault();
       sendInputWithAction({ action: 'reload' });
@@ -212,6 +218,14 @@ export default function SurvivalGame() {
 
   const myPlayer = survivalState?.players?.find(p => p.id === player?.id);
 
+  const handleLeave = () => {
+    if (player?.isHost) {
+      returnToLobby();
+    } else {
+      leaveRoom();
+    }
+  };
+
   return (
     <div className="fixed inset-0 w-screen h-screen overflow-hidden select-none bg-slate-950 z-10">
       {/* 2D Canvas Engine */}
@@ -222,6 +236,7 @@ export default function SurvivalGame() {
         onAim={handleAim}
         onShoot={handleShoot}
         onStopShoot={handleStopShoot}
+        onAction={sendInputWithAction}
       />
 
       {/* Modern HUD Display */}
@@ -232,7 +247,7 @@ export default function SurvivalGame() {
         onReload={handleReload}
         onUseHeal={handleUseHeal}
         onPickup={handlePickup}
-        onLeave={returnToLobby}
+        onLeave={handleLeave}
         killfeed={killfeed}
       />
 

@@ -124,6 +124,23 @@ export const WEAPONS = {
     ammoType: '9mm',
     color: '#10b981',
     length: 28
+  },
+  grenade: {
+    id: 'grenade',
+    name: 'El Bombası',
+    icon: '💣',
+    damage: 135,
+    fireDelay: 800,
+    bulletSpeed: 0,
+    range: 650,
+    magSize: Infinity,
+    reloadTime: 0,
+    isMelee: false,
+    isGrenade: true,
+    bulletCount: 1,
+    spread: 0,
+    ammoType: 'grenade',
+    length: 14
   }
 };
 
@@ -234,7 +251,24 @@ export class SurvivalSession {
     this.ponds = [];
     this.loot = [];
     this.bullets = [];
+    this.thrownGrenades = []; // Active flying/cooking grenades
     this.explosions = [];
+
+    // Moving Atmospheric Fog & Stealth Clouds
+    this.clouds = [
+      { id: 1, x: 800, y: 1200, radius: 250, vx: 0.35, vy: 0.12, opacity: 0.88 },
+      { id: 2, x: 1900, y: 600, radius: 290, vx: 0.42, vy: 0.15, opacity: 0.92 },
+      { id: 3, x: 3100, y: 1400, radius: 270, vx: 0.38, vy: 0.10, opacity: 0.85 },
+      { id: 4, x: 1200, y: 2600, radius: 310, vx: 0.45, vy: 0.18, opacity: 0.90 },
+      { id: 5, x: 2600, y: 2400, radius: 280, vx: 0.36, vy: 0.14, opacity: 0.87 },
+      { id: 6, x: 3500, y: 3200, radius: 300, vx: 0.40, vy: 0.12, opacity: 0.91 },
+      { id: 7, x: 600, y: 3400, radius: 260, vx: 0.33, vy: 0.16, opacity: 0.86 },
+      { id: 8, x: 2200, y: 3600, radius: 290, vx: 0.44, vy: 0.11, opacity: 0.89 },
+      { id: 9, x: 1500, y: 1800, radius: 270, vx: 0.39, vy: 0.13, opacity: 0.88 },
+      { id: 10, x: 2800, y: 900, radius: 320, vx: 0.41, vy: 0.15, opacity: 0.93 },
+      { id: 11, x: 500, y: 600, radius: 280, vx: 0.37, vy: 0.12, opacity: 0.87 },
+      { id: 12, x: 3700, y: 1900, radius: 300, vx: 0.43, vy: 0.14, opacity: 0.90 }
+    ];
 
     // Build rich diverse world map
     this.initMap();
@@ -265,6 +299,7 @@ export class SurvivalSession {
           melee: { ...WEAPONS.fists }
         },
         activeSlot: 'melee',
+        grenades: 2, // Starts with 2 tactical frag grenades!
         scope: '1x',
         ammo: {
           '9mm': 0,
@@ -288,7 +323,8 @@ export class SurvivalSession {
         movement: { x: 0, y: 0 },
         isShooting: false,
         healingItem: null,
-        healingUntil: 0
+        healingUntil: 0,
+        inCloud: false
       };
     });
   }
@@ -581,6 +617,20 @@ export class SurvivalSession {
       });
     });
 
+    // Grenades (18 Tactical Frag Grenade loot drops)
+    for (let i = 0; i < 18; i++) {
+      const gx = 350 + Math.floor(Math.random() * (S - 700));
+      const gy = 350 + Math.floor(Math.random() * (S - 700));
+      this.spawnLoot({
+        x: gx,
+        y: gy,
+        type: 'grenade',
+        count: 2,
+        name: 'El Bombası (x2)',
+        icon: '💣'
+      });
+    }
+
     // Armors, Helmets, Meds
     for (let i = 0; i < 45; i++) {
       const lx = 350 + Math.floor(Math.random() * (S - 700));
@@ -650,6 +700,8 @@ export class SurvivalSession {
       } else {
         drops.push({ type: 'vest', level: lvl, name: ARMORS[lvl].name, icon: ARMORS[lvl].icon, maxVest: ARMORS[lvl].maxVest, bonusVest: ARMORS[lvl].bonusVest });
       }
+    } else if (roll < 0.93) {
+      drops.push({ type: 'grenade', count: 2, name: 'El Bombası (x2)', icon: '💣' });
     } else {
       drops.push({ type: 'heal', itemKey: 'medkit', name: 'İlk Yardım', icon: '🩹' });
       drops.push({ type: 'heal', itemKey: 'soda', name: 'Enerji İçeceği', icon: '🥤' });
@@ -728,12 +780,43 @@ export class SurvivalSession {
     if (data.action === 'reload') {
       this.reloadPlayerWeapon(p);
     } else if (data.action === 'switch_slot') {
-      if (['primary', 'secondary', 'melee'].includes(data.slot)) {
+      if (['primary', 'secondary', 'melee', 'grenade'].includes(data.slot)) {
         if (data.slot === 'secondary' && !p.weapons.secondary) {
           // If secondary is empty, don't switch to it
           return;
         }
+        if (data.slot === 'grenade' && (p.grenades || 0) <= 0) {
+          return;
+        }
         p.activeSlot = data.slot;
+      }
+    } else if (data.action === 'throw_grenade') {
+      if ((p.grenades || 0) > 0) {
+        p.grenades -= 1;
+        const fuseTime = Math.max(200, Math.min(3000, Number(data.fuseRemaining) || 3000));
+        this.thrownGrenades.push({
+          id: Math.random().toString(36).substring(2, 9),
+          shooterId: p.id,
+          x: p.x,
+          y: p.y,
+          vx: Math.max(-32, Math.min(32, Number(data.vx) || 0)),
+          vy: Math.max(-32, Math.min(32, Number(data.vy) || 0)),
+          fuseEndTime: Date.now() + fuseTime,
+          radius: 230,
+          damage: 135
+        });
+        if (p.grenades <= 0 && p.activeSlot === 'grenade') {
+          p.activeSlot = p.weapons.primary ? 'primary' : 'melee';
+        }
+      }
+    } else if (data.action === 'grenade_cook_explode') {
+      // Grenade cooked for 3 seconds in hand: explodes right on the player!
+      if ((p.grenades || 0) > 0) {
+        p.grenades -= 1;
+        this.explodeGrenadeAt(p.x, p.y, p.id, 230, 135, []);
+        if (p.grenades <= 0 && p.activeSlot === 'grenade') {
+          p.activeSlot = p.weapons.primary ? 'primary' : 'melee';
+        }
       }
     } else if (data.action === 'use_heal') {
       this.useHealingItem(p, data.healType);
@@ -878,6 +961,8 @@ export class SurvivalSession {
       }
     } else if (closestItem.type === 'ammo') {
       p.ammo[closestItem.itemKey] = (p.ammo[closestItem.itemKey] || 0) + (closestItem.count || 30);
+    } else if (closestItem.type === 'grenade') {
+      p.grenades = Math.min(6, (p.grenades || 0) + (closestItem.count || 2));
     }
 
     // Remove picked item from world
@@ -1244,6 +1329,51 @@ export class SurvivalSession {
       }
     }
 
+    // 3b. Update Drifting Fog Clouds & Stealth
+    for (const c of this.clouds) {
+      c.x += c.vx;
+      c.y += c.vy;
+      if (c.x > MAP_SIZE + 350) c.x = -350;
+      if (c.y > MAP_SIZE + 350) c.y = -350;
+      if (c.x < -350) c.x = MAP_SIZE + 350;
+      if (c.y < -350) c.y = MAP_SIZE + 350;
+    }
+
+    // Determine if each alive player is concealed inside a drifting cloud
+    for (const p of Object.values(this.players)) {
+      p.inCloud = p.isAlive && this.clouds.some(c => distance(p.x, p.y, c.x, c.y) <= c.radius * 0.95);
+    }
+
+    // 3c. Update Thrown Grenades (Flying / Bouncing / Fuse Detonation)
+    for (let i = this.thrownGrenades.length - 1; i >= 0; i--) {
+      const g = this.thrownGrenades[i];
+      g.x += g.vx;
+      g.y += g.vy;
+      g.vx *= 0.94; // air & ground friction
+      g.vy *= 0.94;
+
+      // Bounce off map boundaries
+      if (g.x < 25 || g.x > MAP_SIZE - 25) g.vx *= -0.7;
+      if (g.y < 25 || g.y > MAP_SIZE - 25) g.vy *= -0.7;
+      g.x = Math.max(25, Math.min(MAP_SIZE - 25, g.x));
+      g.y = Math.max(25, Math.min(MAP_SIZE - 25, g.y));
+
+      // Bounce off obstacles (containers, walls)
+      for (const ob of this.obstacles) {
+        if (circleRectCollisionFast(g.x, g.y, 8, ob.x, ob.y, ob.w, ob.h)) {
+          g.vx *= -0.6;
+          g.vy *= -0.6;
+          break;
+        }
+      }
+
+      // Detonation check: when fuse timer hits 0
+      if (now >= g.fuseEndTime) {
+        this.explodeGrenadeAt(g.x, g.y, g.shooterId, g.radius || 230, g.damage || 135, events);
+        this.thrownGrenades.splice(i, 1);
+      }
+    }
+
     // Clean broken obstacles & exploded barrels
     this.obstacles = this.obstacles.filter(ob => ob.hp > 0);
     this.circularObstacles = this.circularObstacles.filter(cob => cob.hp > 0);
@@ -1272,6 +1402,53 @@ export class SurvivalSession {
       state: this.getState(),
       events
     };
+  }
+
+  explodeGrenadeAt(x, y, shooterId, radius = 230, maxDamage = 135, events = []) {
+    events.push({
+      type: 'explosion',
+      x,
+      y,
+      radius,
+      isGrenade: true
+    });
+
+    const shooter = this.players[shooterId];
+
+    // Damage all players within explosion radius with distance falloff
+    for (const victim of Object.values(this.players)) {
+      if (!victim.isAlive) continue;
+      const d = distance(x, y, victim.x, victim.y);
+      if (d <= radius) {
+        const falloff = 1 - (d / radius);
+        const dmg = Math.round(maxDamage * Math.max(0.18, falloff));
+        this.damagePlayer(victim, dmg, shooter, 'grenade', events);
+      }
+    }
+
+    // Damage breakable wooden crates within blast radius
+    for (const ob of this.obstacles) {
+      if (ob.type === 'crate') {
+        const cx = ob.x + ob.w / 2;
+        const cy = ob.y + ob.h / 2;
+        if (distance(x, y, cx, cy) <= radius) {
+          ob.hp -= 70;
+          if (ob.hp <= 0) {
+            this.destroyCrate(ob);
+          }
+        }
+      }
+    }
+
+    // Detonate explosive red barrels within blast radius (chain explosions!)
+    for (const cob of this.circularObstacles) {
+      if (cob.type === 'barrel') {
+        if (distance(x, y, cob.x, cob.y) <= radius) {
+          cob.hp = 0;
+          this.destroyBarrel(cob, events);
+        }
+      }
+    }
   }
 
   damagePlayer(victim, rawDmg, shooter, weaponId, events) {
@@ -1439,6 +1616,8 @@ export class SurvivalSession {
       ponds: this.ponds,
       loot: this.loot,
       bullets: this.bullets,
+      clouds: this.clouds,
+      thrownGrenades: this.thrownGrenades,
       players: Object.values(this.players).map(p => ({
         id: p.id,
         name: p.name,
@@ -1456,6 +1635,7 @@ export class SurvivalSession {
         scope: p.scope,
         activeSlot: p.activeSlot,
         weapons: p.weapons,
+        grenades: p.grenades || 0,
         ammo: p.ammo,
         heals: p.heals,
         kills: p.kills,
@@ -1469,7 +1649,8 @@ export class SurvivalSession {
         healingUntil: p.healingUntil,
         healingTotal: p.healingTotal || 0,
         isWet: Boolean(p.isWet),
-        inWater: Boolean(p.inWater)
+        inWater: Boolean(p.inWater),
+        inCloud: Boolean(p.inCloud)
       })),
       isGameOver: this.isGameOver
     };

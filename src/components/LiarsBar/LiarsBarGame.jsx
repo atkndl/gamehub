@@ -24,6 +24,7 @@ export default function LiarsBarGame() {
     cutLiarsWire,
     rematchLiars,
     returnToLobby,
+    leaveRoom,
     showToast
   } = useGame();
 
@@ -207,12 +208,18 @@ export default function LiarsBarGame() {
         {/* Right Exit Button */}
         <div>
           <button
-            onClick={returnToLobby}
+            onClick={() => {
+              if (isHost) {
+                returnToLobby();
+              } else {
+                leaveRoom();
+              }
+            }}
             className="p-2 sm:px-3 sm:py-2 rounded-xl bg-red-950/60 hover:bg-red-900/70 text-red-300 text-xs font-bold transition flex items-center gap-1.5 border border-red-800/80 cursor-pointer shadow-xs"
-            title="Lobiye Dön"
+            title={isHost ? "Lobiye Dön" : "Odadan Ayrıl"}
           >
             <Home className="w-4 h-4" />
-            <span className="hidden sm:inline">Lobiye Dön</span>
+            <span className="hidden sm:inline">{isHost ? "Lobiye Dön" : "Ayrıl"}</span>
           </button>
         </div>
       </header>
