@@ -47,6 +47,7 @@ const SPECTATOR_SPRITES = [
 
 export default function RacingCanvas({ state, myPlayerId }) {
   const canvasRef = useRef(null);
+  const animFrameRef = useRef(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
