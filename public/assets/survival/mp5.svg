@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 90" width="190" height="90">
+  <defs>
+    <linearGradient id="mp5-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+    <linearGradient id="mp5-green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+  </defs>
+  <!-- Retractable Wire Stock -->
+  <line x1="12" y1="40" x2="48" y2="40" stroke="#64748b" stroke-width="3" />
+  <rect x="8" y="34" width="5" height="16" rx="2" fill="#0f172a" />
+  <!-- Lower Receiver & Ergonomic Grip -->
+  <path d="M 48 48 L 60 48 L 54 74 L 42 72 Z" fill="url(#mp5-body)" stroke="#090d16" stroke-width="1.8" />
+  <!-- Trigger Guard & Red-accent Trigger -->
+  <path d="M 60 48 C 60 59, 70 59, 70 48" fill="none" stroke="#475569" stroke-width="2" />
+  <path d="M 65 50 Q 67 54, 62 56" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" />
+  <!-- Upper Receiver -->
+  <rect x="48" y="34" width="70" height="15" fill="url(#mp5-body)" stroke="#090d16" stroke-width="2" />
+  <!-- Curved 9mm Magazine -->
+  <path d="M 75 48 C 76 60, 84 72, 92 78 L 99 74 C 92 68, 86 58, 84 48 Z" fill="#0f172a" stroke="#10b981" stroke-width="1.5" />
+  <!-- MP5 Ribbed Tropical Foregrip -->
+  <path d="M 118 36 L 148 36 L 145 52 L 118 48 Z" fill="#020617" stroke="#10b981" stroke-width="1.5" />
+  <!-- Diopter Rear Drum Sight & Hooded Front Sight -->
+  <circle cx="56" cy="30" r="3.5" fill="#334155" stroke="#090d16" stroke-width="1" />
+  <circle cx="160" cy="30" r="4" fill="none" stroke="#10b981" stroke-width="1.5" />
+  <rect x="145" y="38" width="22" height="5" fill="#475569" stroke="#090d16" stroke-width="1" />
+  <!-- 3-Lug Barrel tip -->
+  <rect x="167" y="38" width="6" height="5" fill="#0f172a" stroke="#10b981" stroke-width="1" />
+</svg>

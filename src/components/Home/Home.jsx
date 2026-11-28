@@ -1,7 +1,59 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGame } from '../../context/GameContext';
 import { AVATARS } from '../../utils/turkish';
-import { Sparkles, Play, LogIn, Users, Flame, Award, Gamepad2, Link as LinkIcon } from 'lucide-react';
+import { socket } from '../../socket';
+import {
+  Gamepad2,
+  Play,
+  LogIn,
+  Users,
+  Sparkles,
+  Link as LinkIcon,
+  Flame,
+  ArrowRight,
+  Radio,
+  Clock,
+  ShieldAlert
+} from 'lucide-react';
+
+const GAME_INFO = {
+  liars_bar: {
+    title: "Liar's Bar (Blöf)",
+    badge: 'YENİ',
+    badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+    icon: '🍸',
+    desc: 'K-Q-A blöfleri, itirazlar ve 6 kablolu C4 patlama gerilimi.',
+    gradient: 'from-purple-900/60 via-slate-900 to-slate-950',
+    border: 'border-purple-500/40 hover:border-purple-400'
+  },
+  survival: {
+    title: 'Survival 2D (Battle Royale)',
+    badge: 'POPÜLER',
+    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+    icon: '🎖️',
+    desc: 'Dürbünler, seken mermiler, daralan kırmızı alan ve hayatta kalma mücadelesi.',
+    gradient: 'from-amber-950/50 via-slate-900 to-slate-950',
+    border: 'border-amber-500/40 hover:border-amber-400'
+  },
+  wordle: {
+    title: 'Wordle & Trouble',
+    badge: 'KLASİK',
+    badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+    icon: '🟩',
+    desc: '5 harfli Türkçe kelimeler ve rakiplerin birbirine kelime seçtiği Trouble modu.',
+    gradient: 'from-emerald-950/50 via-slate-900 to-slate-950',
+    border: 'border-emerald-500/40 hover:border-emerald-400'
+  },
+  snake: {
+    title: 'Yılan Arenası',
+    badge: 'AKSİYON',
+    badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+    icon: '🐍',
+    desc: '4 farklı yılan sınıfı, buz dondurma, ateş topları ve can sistemi.',
+    gradient: 'from-cyan-950/50 via-slate-900 to-slate-950',
+    border: 'border-cyan-500/40 hover:border-cyan-400'
+  }
+};
 
 function getInitialInviteCode() {
   try {
@@ -17,7 +69,9 @@ export default function Home() {
   const { createRoom, joinRoom, error, setError } = useGame();
   const inviteCode = getInitialInviteCode();
 
-  const [activeTab, setActiveTab] = useState(() => inviteCode ? 'join' : 'create'); // 'create' | 'join'
+  const [activeTab, setActiveTab] = useState(() => inviteCode ? 'join' : 'create');
+  const [activeRooms, setActiveRooms] = useState([]);
+  const [loadingRooms, setLoadingRooms] = useState(true);
 
   const [name, setName] = useState(() => {
     try {
@@ -52,7 +106,6 @@ export default function Home() {
 
       joinRoom(code, savedName.trim(), savedAvatar)
         .then(() => {
-          // Clean URL so back/refresh works cleanly
           try {
             window.history.replaceState({}, document.title, window.location.pathname);
           } catch (e) {}
@@ -62,6 +115,43 @@ export default function Home() {
         });
     }
   }, [joinRoom, setError]);
+
+  // Fetch active public rooms & listen for realtime updates
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchRooms = () => {
+      fetch('/api/rooms')
+        .then(res => res.json())
+        .then(data => {
+          if (mounted && data?.success) {
+            setActiveRooms(data.rooms || []);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (mounted) setLoadingRooms(false);
+        });
+    };
+
+    fetchRooms();
+    const interval = setInterval(fetchRooms, 8000);
+
+    const handleRoomsUpdated = (rooms) => {
+      if (mounted && Array.isArray(rooms)) {
+        setActiveRooms(rooms);
+        setLoadingRooms(false);
+      }
+    };
+
+    socket.on('rooms_list_updated', handleRoomsUpdated);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      socket.off('rooms_list_updated', handleRoomsUpdated);
+    };
+  }, []);
 
   const saveProfile = (playerName, playerAvatar) => {
     try {
@@ -89,16 +179,16 @@ export default function Home() {
     }
   };
 
-  const handleJoin = async (e) => {
-    e.preventDefault();
+  const handleJoin = async (e, overrideCode) => {
+    if (e) e.preventDefault();
     const trimmed = name.trim();
-    const trimmedCode = (roomCode || inviteCode).trim().toUpperCase();
+    const targetCode = (overrideCode || roomCode || inviteCode).trim().toUpperCase();
 
     if (!trimmed) {
-      setError('Lütfen bir takma ad girin.');
+      setError('Lütfen önce bir takma ad girin.');
       return;
     }
-    if (!trimmedCode) {
+    if (!targetCode) {
       setError('Lütfen 5 haneli oda kodunu girin.');
       return;
     }
@@ -107,7 +197,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      await joinRoom(trimmedCode, trimmed, selectedAvatar);
+      await joinRoom(targetCode, trimmed, selectedAvatar);
       try {
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (e) {}
@@ -118,206 +208,296 @@ export default function Home() {
     }
   };
 
+  const handleQuickJoinRoom = (code) => {
+    setRoomCode(code);
+    setActiveTab('join');
+    if (name.trim()) {
+      handleJoin(null, code);
+    } else {
+      setError('Odaya hızlıca katılmak için lütfen yukarıdan oyuncu adınızı yazın.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12 flex flex-col items-center">
-      {/* Hero Header */}
-      <div className="text-center max-w-xl mx-auto mb-8 sm:mb-10">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100/80 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-4 border border-emerald-200/60 shadow-xs">
-          <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
-          Çok Oyunculu Kelime & Parti Deneyimi
-        </div>
-        <h1 className="font-heading font-black text-4xl sm:text-5xl lg:text-6xl text-slate-900 tracking-tight leading-tight">
-          Birlikte Oyna, <br />
-          <span className="bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 bg-clip-text text-transparent">
-            Kelimeyi İlk Sen Bul!
-          </span>
-        </h1>
-        <p className="mt-3 text-base sm:text-lg text-slate-600">
-          Odanı kur, arkadaşlarına kodunu ilet ve 5 harfli Türkçe Wordle heyecanına anında ortak ol!
-        </p>
-      </div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center px-4 py-8 sm:py-12 relative overflow-hidden">
+      {/* Neo-noir ambient background glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-emerald-600/10 via-cyan-600/5 to-transparent blur-3xl pointer-events-none" />
 
-      {/* Main Action Box */}
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-slate-200/70 border border-slate-200/80 overflow-hidden transition-all">
-        {/* Direct Invite Notification Banner */}
-        {inviteCode && (
-          <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 p-3.5 text-white flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
-              <LinkIcon className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-bold text-white/90">Davet Bağlantısı İle Giriş</div>
-              <div className="text-sm font-black font-heading tracking-wide">
-                <span className="bg-white/25 px-2 py-0.5 rounded-lg mr-1 font-mono">{inviteCode}</span>
-                Odasındasınız
+      {/* Main Container */}
+      <div className="w-full max-w-5xl z-10 flex flex-col items-center">
+        {/* Header */}
+        <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-4 shadow-lg backdrop-blur-md">
+            <Gamepad2 className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <span>Çok Oyunculu Web Oyun Platformu</span>
+          </div>
+
+          <h1 className="font-heading font-black text-4xl sm:text-5xl lg:text-6xl text-white tracking-tight leading-tight">
+            Game<span className="text-emerald-400">Hub</span>
+          </h1>
+
+          <p className="mt-3 text-sm sm:text-base text-slate-400 max-w-lg mx-auto">
+            Arkadaşlarınla anında oda kur veya aktif açık odalara tek tıkla katıl!
+          </p>
+        </div>
+
+        {/* Action Panel & Active Rooms Grid */}
+        <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
+          {/* Left Column: Room Creation & Join Form (5 cols on lg) */}
+          <div className="lg:col-span-5 w-full bg-slate-900/90 rounded-3xl shadow-2xl border border-slate-800 backdrop-blur-md p-5 sm:p-6 relative overflow-hidden">
+            {/* Invite Banner */}
+            {inviteCode && (
+              <div className="mb-4 bg-emerald-500/15 border border-emerald-500/40 rounded-2xl p-3 flex items-center gap-3 text-emerald-300">
+                <LinkIcon className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="text-xs">
+                  <span className="font-black font-mono bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-500/40 mr-1">
+                    {inviteCode}
+                  </span>
+                  odasına davet edildiniz!
+                </div>
               </div>
+            )}
+
+            {/* Tab switchers */}
+            <div className="grid grid-cols-2 p-1 bg-slate-950/80 rounded-2xl border border-slate-800 mb-5">
+              <button
+                type="button"
+                onClick={() => { setActiveTab('create'); setError(null); }}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                  activeTab === 'create'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Play className="w-4 h-4" />
+                Oda Kur
+              </button>
+              <button
+                type="button"
+                onClick={() => { setActiveTab('join'); setError(null); }}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                  activeTab === 'join'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <LogIn className="w-4 h-4" />
+                Koduyla Katıl
+              </button>
             </div>
+
+            {/* Error banner */}
+            {error && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs font-semibold flex items-center gap-2 animate-shake">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={activeTab === 'create' ? handleCreate : handleJoin} className="space-y-4">
+              {/* Nickname input */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Oyuncu Adın
+                </label>
+                <input
+                  type="text"
+                  maxLength={16}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Bir takma ad yaz..."
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-700 bg-slate-950/70 focus:border-emerald-400 focus:bg-slate-900 focus:outline-hidden text-sm sm:text-base font-semibold text-white placeholder-slate-600 transition"
+                  required
+                />
+              </div>
+
+              {/* Avatar Selector */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Avatarın
+                </label>
+                <div className="grid grid-cols-8 gap-1.5 p-2 bg-slate-950/70 rounded-2xl border border-slate-800">
+                  {AVATARS.map((av) => (
+                    <button
+                      key={av}
+                      type="button"
+                      onClick={() => setSelectedAvatar(av)}
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-base transition-all active:scale-90 cursor-pointer ${
+                        selectedAvatar === av
+                          ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30 scale-110 ring-2 ring-emerald-400'
+                          : 'hover:bg-slate-800'
+                      }`}
+                    >
+                      {av}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Room Code input (if join tab) */}
+              {activeTab === 'join' && (
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    5 Haneli Oda Kodu
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={roomCode}
+                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                    placeholder="Örn: KALE7"
+                    className="w-full px-4 py-3 rounded-2xl border-2 border-slate-700 bg-slate-950/70 focus:border-emerald-400 focus:outline-hidden font-mono text-center text-lg font-black tracking-widest uppercase text-emerald-400 transition"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-heading font-black text-base tracking-wide shadow-xl shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2 text-sm">
+                    <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>İşleniyor...</span>
+                  </span>
+                ) : activeTab === 'create' ? (
+                  <>
+                    <Play className="w-4 h-4 fill-current" />
+                    Oda Oluştur
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    Odaya Gir
+                  </>
+                )}
+              </button>
+            </form>
           </div>
-        )}
 
-        {/* Tab switchers */}
-        <div className="grid grid-cols-2 p-1.5 bg-slate-100 border-b border-slate-200/70 m-3 rounded-2xl">
-          <button
-            type="button"
-            onClick={() => { setActiveTab('create'); setError(null); }}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
-              activeTab === 'create'
-                ? 'bg-white text-emerald-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Play className="w-4 h-4" />
-            Oda Kur
-          </button>
-          <button
-            type="button"
-            onClick={() => { setActiveTab('join'); setError(null); }}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
-              activeTab === 'join'
-                ? 'bg-white text-emerald-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <LogIn className="w-4 h-4" />
-            Odaya Katıl
-          </button>
-        </div>
-
-        {/* Error alert */}
-        {error && (
-          <div className="mx-6 mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2 animate-shake">
-            <span>⚠️</span>
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={activeTab === 'create' ? handleCreate : handleJoin} className="p-6 pt-4 space-y-5">
-          {/* Room Code input (if join) */}
-          {activeTab === 'join' && (
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                5 Haneli Oda Kodu
-              </label>
-              <input
-                type="text"
-                maxLength={6}
-                value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                placeholder="Örn: KALE7"
-                className="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 focus:border-emerald-500 focus:outline-hidden font-mono text-center text-xl font-bold tracking-widest uppercase transition bg-slate-50/50 focus:bg-white text-slate-900"
-                required
-              />
+          {/* Right Column: Live Active Rooms & Quick Join (7 cols on lg) */}
+          <div className="lg:col-span-7 w-full flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <h2 className="font-heading font-black text-lg text-white">
+                  Canlı Açık Odalar
+                </h2>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-bold border border-slate-700">
+                  {activeRooms.length}
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-500 hidden sm:block">
+                Boş kalan veya pasif odalar otomatik silinir
+              </span>
             </div>
-          )}
 
-          {/* Nickname input */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-              Oyuncu Adın
-            </label>
-            <input
-              type="text"
-              maxLength={15}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Adını yaz..."
-              autoFocus={Boolean(inviteCode)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-emerald-500 focus:outline-hidden text-base font-semibold transition bg-slate-50/50 focus:bg-white text-slate-900"
-              required
-            />
-          </div>
+            {loadingRooms ? (
+              <div className="p-8 rounded-3xl bg-slate-900/60 border border-slate-800 text-center text-slate-500 text-sm animate-pulse">
+                Aktif odalar aranıyor...
+              </div>
+            ) : activeRooms.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-slate-900/60 border border-slate-800/80 text-center flex flex-col items-center justify-center">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800/60 flex items-center justify-center text-2xl mb-3">
+                  🛋️
+                </div>
+                <div className="text-sm font-bold text-slate-300">Şu anda açık oda bulunmuyor</div>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                  Hemen soldan bir oda kurup arkadaşlarına davet kodunu göndererek ilk oyunu başlatabilirsin!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {activeRooms.map((r) => {
+                  const game = GAME_INFO[r.selectedGame] || GAME_INFO.wordle;
+                  const isJoinable = r.gameState === 'lobby';
 
-          {/* Avatar selector */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-              Avatar Seçimi
-            </label>
-            <div className="grid grid-cols-8 gap-1.5 p-2 bg-slate-50 rounded-2xl border border-slate-200/80">
-              {AVATARS.map((av) => (
-                <button
-                  key={av}
-                  type="button"
-                  onClick={() => setSelectedAvatar(av)}
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg transition-transform active:scale-90 ${
-                    selectedAvatar === av
-                      ? 'bg-emerald-500 shadow-md shadow-emerald-500/30 scale-110 ring-2 ring-emerald-500/20'
-                      : 'hover:bg-slate-200/60'
-                  }`}
+                  return (
+                    <div
+                      key={r.code}
+                      className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition shadow-lg flex flex-col justify-between group"
+                    >
+                      <div>
+                        {/* Top info row */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-lg">{game.icon}</span>
+                          <span
+                            className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-full border ${
+                              isJoinable
+                                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                            }`}
+                          >
+                            {isJoinable ? 'LOBİ (KATILINABİLİR)' : 'OYUNDA'}
+                          </span>
+                        </div>
+
+                        {/* Room code & game title */}
+                        <div className="font-heading font-black text-base text-white flex items-center gap-2">
+                          <span>{r.hostAvatar} {r.hostName}'in Odası</span>
+                        </div>
+                        <div className="text-xs text-slate-400 mt-0.5 font-medium">
+                          Oyun: <span className="text-slate-200 font-bold">{game.title}</span>
+                        </div>
+                      </div>
+
+                      {/* Bottom action row */}
+                      <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                          <Users className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="font-mono font-bold text-slate-300">
+                            {r.playerCount} / {r.maxPlayers}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleQuickJoinRoom(r.code)}
+                          disabled={!isJoinable}
+                          className={`px-3 py-1.5 rounded-xl font-heading font-black text-xs transition flex items-center gap-1 cursor-pointer active:scale-95 ${
+                            isJoinable
+                              ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-md shadow-emerald-500/20'
+                              : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          }`}
+                        >
+                          <span>{isJoinable ? 'Hemen Katıl' : 'Dolu/Oyunda'}</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Game Showcase Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-2">
+              {Object.entries(GAME_INFO).map(([key, info]) => (
+                <div
+                  key={key}
+                  className={`p-3 rounded-2xl bg-gradient-to-b ${info.gradient} border ${info.border} transition flex flex-col justify-between`}
                 >
-                  {av}
-                </button>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xl">{info.icon}</span>
+                      <span className={`text-[9px] font-mono font-black px-1.5 py-0.2 rounded-full border ${info.badgeColor}`}>
+                        {info.badge}
+                      </span>
+                    </div>
+                    <div className="font-heading font-black text-xs text-white leading-tight">
+                      {info.title}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-2 line-clamp-2 leading-relaxed">
+                    {info.desc}
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
-
-          {/* Submit button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-heading font-black text-lg tracking-wide shadow-lg shadow-emerald-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Odaya Katılınıyor...</span>
-              </span>
-            ) : activeTab === 'create' ? (
-              <>
-                <Play className="w-5 h-5 fill-current" />
-                Oda Kur ve Başla
-              </>
-            ) : (
-              <>
-                <LogIn className="w-5 h-5" />
-                {inviteCode ? `${inviteCode} Odasına Katıl` : 'Odaya Katıl'}
-              </>
-            )}
-          </button>
-        </form>
-      </div>
-
-      {/* Feature Pills */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-10 w-full max-w-4xl">
-        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center shrink-0 text-lg">
-            🍸
-          </div>
-          <div>
-            <h2 className="font-heading font-black text-sm text-slate-900 flex items-center gap-1.5">
-              Liar's Bar (Blöf)
-              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-red-100 text-red-700">YENİ</span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">K-Q-A blöfleri, itirazlar ve 6 kablolu C4 patlama gerilimi!</p>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 text-lg">
-            🟩
-          </div>
-          <div>
-            <h2 className="font-heading font-bold text-sm text-slate-800">Wordle & Trouble</h2>
-            <p className="text-xs text-slate-500 mt-0.5">5 harfli Türkçe kelimeler, rakiplerin kelime seçtiği Trouble modu.</p>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 text-lg">
-            🎖️
-          </div>
-          <div>
-            <h2 className="font-heading font-bold text-sm text-slate-800">Survival 2D</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Dürbün, seken mermiler, daralan kırmızı alan ve hayatta kalma.</p>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 shadow-xs flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center shrink-0 text-lg">
-            🐍
-          </div>
-          <div>
-            <h2 className="font-heading font-bold text-sm text-slate-800">Yılan Arenası</h2>
-            <p className="text-xs text-slate-500 mt-0.5">4 farklı sınıf, buz dondurma, ateş topları ve can sistemi.</p>
           </div>
         </div>
       </div>

@@ -36,7 +36,9 @@ import {
   handleLiarsBarChallenge,
   handleLiarsBarProceedToBomb,
   handleLiarsBarCutWire,
-  handleLiarsBarProceedAfterBomb
+  handleLiarsBarProceedAfterBomb,
+  getActiveRoomsList,
+  touchRoomActivity
 } from './roomManager.js';
 import { SNAKE_CLASSES } from './snakeLogic.js';
 import { WEAPONS, SCOPES, ARMORS, HELMETS } from './survivalLogic.js';
@@ -65,6 +67,10 @@ const io = new Server(server, {
 // API Routes
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: Date.now() });
+});
+
+app.get('/api/rooms', (req, res) => {
+  res.json({ success: true, rooms: getActiveRoomsList() });
 });
 
 app.get('/api/words/stats', (req, res) => {
@@ -236,6 +242,13 @@ app.get('/api/survival/items', (req, res) => {
 io.on('connection', (socket) => {
   console.log(`[Socket] Connected: ${socket.id}`);
 
+  // Get Active Rooms List
+  socket.on('get_active_rooms', (callback) => {
+    if (typeof callback === 'function') {
+      callback({ success: true, rooms: getActiveRoomsList() });
+    }
+  });
+
   // Create room
   socket.on('create_room', ({ playerName, avatar }, callback) => {
     try {
@@ -244,6 +257,7 @@ io.on('connection', (socket) => {
       console.log(`[Room Created] Code: ${room.code} by ${playerName}`);
       if (typeof callback === 'function') callback({ success: true, room });
       io.to(room.code).emit('room_updated', room);
+      io.emit('rooms_list_updated', getActiveRoomsList());
     } catch (err) {
       console.error('Error creating room:', err);
       if (typeof callback === 'function') callback({ success: false, error: 'Oda oluşturulamadı.' });
@@ -259,10 +273,12 @@ io.on('connection', (socket) => {
         return;
       }
       const room = result.room;
+      touchRoomActivity(room.code);
       socket.join(room.code);
       console.log(`[Room Joined] Code: ${room.code} by ${playerName}`);
       if (typeof callback === 'function') callback({ success: true, room });
       io.to(room.code).emit('room_updated', room);
+      io.emit('rooms_list_updated', getActiveRoomsList());
     } catch (err) {
       console.error('Error joining room:', err);
       if (typeof callback === 'function') callback({ success: false, error: 'Odaya katılırken hata oluştu.' });
@@ -757,6 +773,8 @@ io.on('connection', (socket) => {
       checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
     }
+    // Broadcast active rooms update to lobby/home
+    io.emit('rooms_list_updated', getActiveRoomsList());
   });
 
   // Disconnect
@@ -771,6 +789,8 @@ io.on('connection', (socket) => {
       checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
     }
+    // Broadcast active rooms update to lobby/home
+    io.emit('rooms_list_updated', getActiveRoomsList());
   });
 });
 

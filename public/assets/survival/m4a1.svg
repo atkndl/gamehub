@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 90" width="220" height="90">
+  <defs>
+    <linearGradient id="m4-dark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+    <linearGradient id="m4-blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  <!-- Collapsible Crane Stock & Buffer Tube -->
+  <rect x="25" y="41" width="30" height="6" fill="#475569" />
+  <path d="M 8 36 L 28 36 L 25 54 L 14 62 L 8 62 Z" fill="url(#m4-dark)" stroke="#090d16" stroke-width="2" />
+  <!-- Modern Pistol Grip -->
+  <path d="M 55 49 L 68 49 L 63 76 L 50 74 Z" fill="url(#m4-dark)" stroke="#090d16" stroke-width="1.8" />
+  <!-- Lower & Upper Receiver -->
+  <path d="M 50 36 L 110 36 L 110 49 L 50 49 Z" fill="url(#m4-dark)" stroke="#090d16" stroke-width="2" />
+  <!-- Trigger Guard & Trigger -->
+  <path d="M 68 49 C 68 60, 78 60, 78 49" fill="none" stroke="#475569" stroke-width="2" />
+  <path d="M 74 51 Q 76 55, 71 57" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" />
+  <!-- STANAG 5.56 Magazine (Metal ribbed) -->
+  <path d="M 86 48 L 98 48 L 93 78 L 82 78 Z" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5" />
+  <line x1="85" y1="60" x2="95" y2="60" stroke="#3b82f6" stroke-width="1" />
+  <!-- Quad Rail Handguard -->
+  <rect x="110" y="37" width="55" height="11" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5" />
+  <!-- Rail slots -->
+  <line x1="116" y1="40" x2="116" y2="45" stroke="#64748b" stroke-width="2" />
+  <line x1="124" y1="40" x2="124" y2="45" stroke="#64748b" stroke-width="2" />
+  <line x1="132" y1="40" x2="132" y2="45" stroke="#64748b" stroke-width="2" />
+  <line x1="140" y1="40" x2="140" y2="45" stroke="#64748b" stroke-width="2" />
+  <line x1="148" y1="40" x2="148" y2="45" stroke="#64748b" stroke-width="2" />
+  <line x1="156" y1="40" x2="156" y2="45" stroke="#64748b" stroke-width="2" />
+  <!-- Tactical Optic Sight (Red Dot / Holo) -->
+  <rect x="72" y="27" width="28" height="9" rx="2" fill="#0f172a" stroke="#3b82f6" stroke-width="1.5" />
+  <circle cx="86" cy="31" r="3" fill="#ef4444" />
+  <!-- Barrel & Gas Block Front Sight -->
+  <rect x="165" y="40" width="38" height="5" fill="#475569" stroke="#090d16" stroke-width="1" />
+  <path d="M 172 32 L 178 32 L 176 45 L 172 45 Z" fill="#1e293b" stroke="#090d16" stroke-width="1" />
+  <!-- Birdcage Flash Hider -->
+  <rect x="203" y="39" width="10" height="7" rx="1" fill="#64748b" stroke="#090d16" stroke-width="1" />
+</svg>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="helm-l1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+  </defs>
+  <!-- Outer Dome -->
+  <path d="M 15 55 C 15 25, 85 25, 85 55 L 85 64 L 75 66 L 70 58 L 30 58 L 25 66 L 15 64 Z" fill="url(#helm-l1)" stroke="#0f172a" stroke-width="3" />
+  <!-- Rim highlight -->
+  <path d="M 18 55 C 22 30, 78 30, 82 55" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" />
+  <!-- Chinstrap -->
+  <path d="M 28 62 Q 50 82, 72 62" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" />
+  <!-- Level 1 Badge -->
+  <circle cx="50" cy="45" r="9" fill="#10b981" />
+  <text x="50" y="49" font-family="monospace" font-size="11" font-weight="900" fill="#ffffff" text-anchor="middle">L1</text>
+</svg>

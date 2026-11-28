@@ -28,10 +28,10 @@ export default function Navbar() {
                 Game<span className="text-emerald-500">Hub</span>
               </span>
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wider">
-                Wordle
+                Multiplayer
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 hidden sm:block">Çok Oyunculu Parti Oyunları</p>
+            <p className="text-[11px] text-slate-500 hidden sm:block">Çok Oyunculu Parti & Aksiyon Oyunları</p>
           </div>
         </div>
 

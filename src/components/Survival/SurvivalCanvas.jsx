@@ -1,6 +1,22 @@
 import React, { useRef, useEffect } from 'react';
 import { SCOPES, WEAPONS } from '../../../server/survivalLogic';
 
+const LOOT_IMAGE_URLS = {
+  m9: '/assets/survival/m9.svg',
+  m870: '/assets/survival/m870.svg',
+  ak47: '/assets/survival/ak47.svg',
+  m4a1: '/assets/survival/m4a1.svg',
+  mosin: '/assets/survival/mosin.svg',
+  mp5: '/assets/survival/mp5.svg',
+  medkit: '/assets/survival/medkit.svg',
+  bandage: '/assets/survival/bandage.svg',
+  soda: '/assets/survival/soda.svg',
+  '2x': '/assets/survival/scope2x.svg',
+  '4x': '/assets/survival/scope4x.svg',
+  '8x': '/assets/survival/scope8x.svg',
+  '15x': '/assets/survival/scope15x.svg'
+};
+
 export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, onShoot, onStopShoot }) {
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -19,6 +35,28 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
   const sparksRef = useRef([]); // Metallic ricochet sparks & wood debris
   const prevCrateHpRef = useRef({});
   const prevCratePosRef = useRef({});
+  const lootImagesRef = useRef({});
+
+  // Preload procedural SVG images for crisp ground loot rendering
+  useEffect(() => {
+    Object.entries(LOOT_IMAGE_URLS).forEach(([key, src]) => {
+      if (!lootImagesRef.current[key]) {
+        const img = new Image();
+        img.src = src;
+        lootImagesRef.current[key] = img;
+      }
+    });
+    // Helmets and vests
+    for (let i = 1; i <= 3; i++) {
+      const hImg = new Image();
+      hImg.src = `/assets/survival/helmet${i}.svg`;
+      lootImagesRef.current[`helmet_${i}`] = hImg;
+
+      const vImg = new Image();
+      vImg.src = `/assets/survival/vest${i}.svg`;
+      lootImagesRef.current[`vest_${i}`] = vImg;
+    }
+  }, []);
 
   // Handle Mouse Aiming & Shooting
   useEffect(() => {
@@ -226,36 +264,92 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         });
       }
 
-      // 4. Render Ground Loot
+      // 4. Render Ground Loot with Zoom-Compensated Scale & Crisp SVG Assets
       if (Array.isArray(curState?.loot)) {
+        // As user zooms out with 4x, 8x, 15x scopes, scale up ground loot so it remains clearly visible
+        const zoomScale = Math.max(1.0, Math.min(2.8, 1.65 / zoom));
+
         curState.loot.forEach(item => {
           ctx.save();
-          const bob = Math.sin(Date.now() / 250) * 2.5;
+          const bob = Math.sin(Date.now() / 250) * 2.5 * zoomScale;
+
+          // Resolve image key
+          let imgKey = null;
+          if (item.type === 'weapon' && item.itemKey) {
+            imgKey = item.itemKey;
+          } else if (item.type === 'scope' && item.scopeKey) {
+            imgKey = item.scopeKey;
+          } else if (item.type === 'heal' && item.healType) {
+            imgKey = item.healType;
+          } else if (item.type === 'helmet' && item.level) {
+            imgKey = `helmet_${item.level}`;
+          } else if (item.type === 'vest' && item.level) {
+            imgKey = `vest_${item.level}`;
+          }
+
+          const lootImg = imgKey ? lootImagesRef.current[imgKey] : null;
+          const isLootLoaded = lootImg && lootImg.complete && lootImg.naturalWidth > 0;
 
           // Glowing loot shadow
-          ctx.shadowBlur = 12;
-          ctx.shadowColor = item.type === 'weapon' ? '#fbbf24' : (item.type === 'scope' ? '#818cf8' : '#10b981');
+          const glowColor = item.type === 'weapon' ? '#fbbf24' : (item.type === 'scope' ? '#a855f7' : (item.type === 'helmet' || item.type === 'vest' ? '#38bdf8' : '#10b981'));
+          ctx.shadowBlur = 14 * zoomScale;
+          ctx.shadowColor = glowColor;
 
           // Loot pedestal base
+          const baseRadius = 20 * zoomScale;
           ctx.beginPath();
-          ctx.arc(item.x, item.y, 18, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.arc(item.x, item.y, baseRadius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
           ctx.fill();
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = glowColor;
+          ctx.lineWidth = 2 * zoomScale;
           ctx.stroke();
 
-          // Loot Icon / Label
-          ctx.font = '18px sans-serif';
+          // Draw procedural asset image if loaded, otherwise fallback to emoji icon
+          if (isLootLoaded) {
+            ctx.shadowBlur = 0;
+            const imgSize = (item.type === 'weapon' ? 38 : 28) * zoomScale;
+            ctx.drawImage(
+              lootImg,
+              item.x - imgSize / 2,
+              item.y - imgSize / 2 + bob,
+              imgSize,
+              imgSize
+            );
+          } else {
+            ctx.font = `${Math.round(18 * zoomScale)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowBlur = 0;
+            ctx.fillText(item.icon || '📦', item.x, item.y + bob);
+          }
+
+          // Name pill tag (high-contrast readable badge)
+          ctx.shadowBlur = 0;
+          const tagFontSize = Math.max(9, Math.round(9 * zoomScale));
+          ctx.font = `bold ${tagFontSize}px sans-serif`;
+          const text = item.name || '';
+          const metrics = ctx.measureText(text);
+          const padX = 6 * zoomScale;
+          const padY = 3 * zoomScale;
+          const tagW = metrics.width + padX * 2;
+          const tagH = tagFontSize + padY * 2;
+          const tagY = item.y + baseRadius + 4 * zoomScale;
+
+          // Tag background pill
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          ctx.beginPath();
+          ctx.roundRect(item.x - tagW / 2, tagY, tagW, tagH, 4 * zoomScale);
+          ctx.fill();
+          ctx.strokeStyle = glowColor;
+          ctx.lineWidth = 1 * zoomScale;
+          ctx.stroke();
+
+          // Tag text
+          ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.shadowBlur = 0;
-          ctx.fillText(item.icon || '📦', item.x, item.y + bob);
-
-          // Name tag
-          ctx.font = 'bold 9px sans-serif';
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(item.name || '', item.x, item.y + 26);
+          ctx.fillText(text, item.x, tagY + tagH / 2);
 
           ctx.restore();
         });

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 85" width="240" height="85">
+  <defs>
+    <linearGradient id="mosin-wood" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#451a03" />
+      <stop offset="40%" stop-color="#78350f" />
+      <stop offset="100%" stop-color="#92400e" />
+    </linearGradient>
+    <linearGradient id="mosin-scope" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6b21a8" />
+      <stop offset="50%" stop-color="#3b0764" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+  <!-- Full-length Wooden Stock -->
+  <path d="M 6 52 L 28 42 L 56 42 L 68 46 L 195 44 L 195 48 L 78 52 L 58 64 L 38 64 L 6 62 Z" fill="url(#mosin-wood)" stroke="#1c0a02" stroke-width="2" />
+  <rect x="5" y="52" width="4" height="10" fill="#1e293b" />
+  <!-- Steel Barrel -->
+  <rect x="120" y="39" width="108" height="4.5" fill="#334155" stroke="#090d16" stroke-width="1" />
+  <!-- Barrel Rings -->
+  <rect x="150" y="38" width="3" height="7" fill="#64748b" />
+  <rect x="185" y="38" width="3" height="7" fill="#64748b" />
+  <!-- Front Hooded Sight -->
+  <circle cx="224" cy="38" r="3" fill="none" stroke="#a855f7" stroke-width="1.5" />
+  <line x1="224" y1="38" x2="224" y2="43.5" stroke="#a855f7" stroke-width="1.5" />
+  <!-- Receiver & Bolt Handle -->
+  <rect x="68" y="37" width="52" height="9" fill="#1e293b" stroke="#090d16" stroke-width="1.5" />
+  <circle cx="82" cy="35" r="3" fill="#e2e8f0" stroke="#090d16" stroke-width="1" />
+  <line x1="82" y1="35" x2="82" y2="42" stroke="#e2e8f0" stroke-width="2" />
+  <!-- Magazine Box & Trigger Guard -->
+  <rect x="76" y="46" width="16" height="8" rx="1" fill="#0f172a" stroke="#a855f7" stroke-width="1.2" />
+  <path d="M 68 46 C 68 55, 76 55, 76 46" fill="none" stroke="#475569" stroke-width="2" />
+  <path d="M 72 48 Q 74 52, 70 53" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round" />
+  <!-- PU High-Power Sniper Scope Mounted on Top -->
+  <rect x="64" y="24" width="60" height="9" rx="3" fill="url(#mosin-scope)" stroke="#a855f7" stroke-width="1.5" />
+  <rect x="60" y="22" width="7" height="13" rx="1" fill="#581c87" stroke="#090d16" stroke-width="1" />
+  <rect x="120" y="22" width="7" height="13" rx="1" fill="#581c87" stroke="#090d16" stroke-width="1" />
+  <!-- Scope Mount Brackets -->
+  <rect x="74" y="33" width="5" height="5" fill="#334155" />
+  <rect x="108" y="33" width="5" height="5" fill="#334155" />
+  <circle cx="123" cy="28.5" r="2.5" fill="#c084fc" />
+</svg>

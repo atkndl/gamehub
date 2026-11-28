@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 90" width="200" height="90">
+  <defs>
+    <linearGradient id="m870-metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="60%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+    <linearGradient id="m870-pump" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ea580c" />
+      <stop offset="100%" stop-color="#9a3412" />
+    </linearGradient>
+  </defs>
+  <!-- Long Barrel -->
+  <rect x="55" y="32" width="138" height="8" rx="1" fill="url(#m870-metal)" stroke="#090d16" stroke-width="1.5" />
+  <!-- Magazine Tube below barrel -->
+  <rect x="65" y="41" width="118" height="6" rx="1" fill="#334155" stroke="#0f172a" stroke-width="1" />
+  <!-- Barrel Clamp -->
+  <rect x="175" y="31" width="5" height="17" rx="1" fill="#64748b" />
+  <!-- Front Bead Sight -->
+  <circle cx="190" cy="30" r="2" fill="#fbbf24" />
+  <!-- Pump Fore-end Ribbed Grip -->
+  <rect x="105" y="38" width="45" height="12" rx="3" fill="url(#m870-pump)" stroke="#7c2d12" stroke-width="1.5" />
+  <line x1="115" y1="38" x2="115" y2="50" stroke="#431407" stroke-width="1.5" />
+  <line x1="123" y1="38" x2="123" y2="50" stroke="#431407" stroke-width="1.5" />
+  <line x1="131" y1="38" x2="131" y2="50" stroke="#431407" stroke-width="1.5" />
+  <line x1="139" y1="38" x2="139" y2="50" stroke="#431407" stroke-width="1.5" />
+  <!-- Receiver Body -->
+  <path d="M 50 30 L 85 30 L 85 48 L 50 48 Z" fill="url(#m870-metal)" stroke="#090d16" stroke-width="2" />
+  <!-- Ejection port with 12G red shell visible -->
+  <rect x="62" y="33" width="16" height="7" fill="#0f172a" />
+  <rect x="64" y="34" width="11" height="5" rx="1" fill="#dc2626" />
+  <rect x="75" y="34" width="2" height="5" fill="#eab308" />
+  <!-- Trigger Guard & Trigger -->
+  <path d="M 52 48 C 52 60, 40 60, 40 48" fill="none" stroke="#475569" stroke-width="2.5" />
+  <path d="M 47 50 Q 48 55, 43 56" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" />
+  <!-- Stock & Grip -->
+  <path d="M 50 48 L 42 66 L 33 66 L 38 48 L 10 52 L 5 72 L 18 78 L 38 72 L 48 48 Z" fill="#1e293b" stroke="#090d16" stroke-width="2" />
+  <!-- Rubber recoil pad -->
+  <path d="M 5 72 L 18 78 L 16 83 L 3 77 Z" fill="#020617" />
+</svg>

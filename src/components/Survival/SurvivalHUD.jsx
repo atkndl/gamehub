@@ -2,6 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Shield, Zap, Crosshair, ArrowLeft, RotateCcw, Package, AlertTriangle, Radio } from 'lucide-react';
 import { SCOPES, HELMETS, ARMORS } from '../../../server/survivalLogic';
 
+const WEAPON_ASSET_ICONS = {
+  m9: '/assets/survival/m9.svg',
+  m870: '/assets/survival/m870.svg',
+  ak47: '/assets/survival/ak47.svg',
+  m4a1: '/assets/survival/m4a1.svg',
+  mosin: '/assets/survival/mosin.svg',
+  mp5: '/assets/survival/mp5.svg'
+};
+
 const AMMO_CONFIG = {
   '9mm': { label: '9mm', short: '9mm', color: '#fbbf24', icon: '🟡' },
   '12g': { label: '12G Pompalı', short: '12 Gauge', color: '#f97316', icon: '🟠' },
@@ -211,8 +220,13 @@ export default function SurvivalHUD({
             {/* Scope Badge (Equipped or Soft Empty) */}
             {myPlayer.scope && myPlayer.scope !== '1x' ? (
               <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-indigo-950/90 border border-indigo-500/50 text-xs font-bold text-indigo-300 backdrop-blur-md shadow-md">
-                <div className="flex items-center gap-1.5">
-                  <Crosshair className="w-3.5 h-3.5 text-indigo-400" />
+                <div className="flex items-center gap-2">
+                  <img
+                    src={`/assets/survival/scope${myPlayer.scope}.svg`}
+                    alt="scope"
+                    className="w-4 h-4 object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
                   <span>Dürbün:</span>
                 </div>
                 <span className="px-2 py-0.5 rounded bg-indigo-900/90 text-white font-mono font-bold text-[10px] border border-indigo-400/40">
@@ -232,8 +246,13 @@ export default function SurvivalHUD({
             {/* Helmet Badge (Equipped or Soft Empty) */}
             {myPlayer.helmetLevel > 0 && HELMETS[myPlayer.helmetLevel] ? (
               <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-xs font-bold text-emerald-300 backdrop-blur-md shadow-md">
-                <div className="flex items-center gap-1.5">
-                  <span>{HELMETS[myPlayer.helmetLevel].icon || '🪖'}</span>
+                <div className="flex items-center gap-2">
+                  <img
+                    src={`/assets/survival/helmet${myPlayer.helmetLevel}.svg`}
+                    alt="helmet"
+                    className="w-4 h-4 object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
                   <span>{HELMETS[myPlayer.helmetLevel].name}</span>
                 </div>
                 <span className="px-1.5 py-0.5 rounded bg-emerald-900/90 text-white font-mono font-black text-[10px] border border-emerald-400/40">
@@ -253,8 +272,13 @@ export default function SurvivalHUD({
             {/* Vest Badge (Equipped or Soft Empty) */}
             {myPlayer.vestLevel > 0 && ARMORS[myPlayer.vestLevel] ? (
               <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-sky-950/90 border border-sky-500/50 text-xs font-bold text-sky-300 backdrop-blur-md shadow-md">
-                <div className="flex items-center gap-1.5">
-                  <span>{ARMORS[myPlayer.vestLevel].icon || '🦺'}</span>
+                <div className="flex items-center gap-2">
+                  <img
+                    src={`/assets/survival/vest${myPlayer.vestLevel}.svg`}
+                    alt="vest"
+                    className="w-4 h-4 object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
                   <span>{ARMORS[myPlayer.vestLevel].name}</span>
                 </div>
                 <span className="px-1.5 py-0.5 rounded bg-sky-900/90 text-white font-mono font-black text-[10px] border border-sky-400/40">
@@ -414,14 +438,19 @@ export default function SurvivalHUD({
             <button
               type="button"
               onClick={() => onUseHeal('bandage')}
-              className={`px-3 py-2 rounded-xl flex items-center gap-2 border transition-all cursor-pointer ${
+              className={`px-3 py-2 rounded-xl flex items-center gap-2.5 border transition-all cursor-pointer ${
                 (myPlayer.heals?.bandage || 0) > 0
                   ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/80 shadow-md shadow-emerald-500/20 active:scale-95'
                   : 'bg-slate-800/50 border-slate-700/60 text-slate-500 opacity-60'
               }`}
               title="Sargı Bezi [Tuş: 4]"
             >
-              <span className="text-lg">🩹</span>
+              <img
+                src="/assets/survival/bandage.svg"
+                alt="bandage"
+                className="w-6 h-6 object-contain"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
               <div className="flex flex-col text-left">
                 <div className="text-[10px] font-bold leading-none">Sargı Bezi</div>
                 <div className="text-xs font-mono font-black text-white">x{myPlayer.heals?.bandage || 0}</div>
@@ -435,14 +464,19 @@ export default function SurvivalHUD({
             <button
               type="button"
               onClick={() => onUseHeal('medkit')}
-              className={`px-3 py-2 rounded-xl flex items-center gap-2 border transition-all cursor-pointer ${
+              className={`px-3 py-2 rounded-xl flex items-center gap-2.5 border transition-all cursor-pointer ${
                 (myPlayer.heals?.medkit || 0) > 0
                   ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/80 shadow-md shadow-emerald-500/20 active:scale-95'
                   : 'bg-slate-800/50 border-slate-700/60 text-slate-500 opacity-60'
               }`}
               title="İlk Yardım Çantası [Tuş: 5]"
             >
-              <span className="text-lg">🧰</span>
+              <img
+                src="/assets/survival/medkit.svg"
+                alt="medkit"
+                className="w-6 h-6 object-contain"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
               <div className="flex flex-col text-left">
                 <div className="text-[10px] font-bold leading-none">İlk Yardım</div>
                 <div className="text-xs font-mono font-black text-white">x{myPlayer.heals?.medkit || 0}</div>
@@ -456,14 +490,19 @@ export default function SurvivalHUD({
             <button
               type="button"
               onClick={() => onUseHeal('soda')}
-              className={`px-3 py-2 rounded-xl flex items-center gap-2 border transition-all cursor-pointer ${
+              className={`px-3 py-2 rounded-xl flex items-center gap-2.5 border transition-all cursor-pointer ${
                 (myPlayer.heals?.soda || 0) > 0
                   ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/80 shadow-md shadow-emerald-500/20 active:scale-95'
                   : 'bg-slate-800/50 border-slate-700/60 text-slate-500 opacity-60'
               }`}
               title="Enerji İçeceği [Tuş: 6]"
             >
-              <span className="text-lg">🥤</span>
+              <img
+                src="/assets/survival/soda.svg"
+                alt="soda"
+                className="w-6 h-6 object-contain"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
               <div className="flex flex-col text-left">
                 <div className="text-[10px] font-bold leading-none">Enerji</div>
                 <div className="text-xs font-mono font-black text-white">x{myPlayer.heals?.soda || 0}</div>
@@ -511,7 +550,7 @@ export default function SurvivalHUD({
             <button
               type="button"
               onClick={() => onSwitchSlot('primary')}
-              className={`p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[145px] sm:min-w-[165px] relative overflow-hidden ${
+              className={`p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[155px] sm:min-w-[175px] relative overflow-hidden ${
                 myPlayer.activeSlot === 'primary'
                   ? 'bg-slate-900/95 border-2 border-amber-400 shadow-xl shadow-amber-500/20 ring-2 ring-amber-400/30'
                   : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600'
@@ -519,7 +558,16 @@ export default function SurvivalHUD({
             >
               <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
                 <span>[1] BİRİNCİL</span>
-                <span className="text-base">{myPlayer.weapons?.primary?.icon || '🔫'}</span>
+                {myPlayer.weapons?.primary?.id && WEAPON_ASSET_ICONS[myPlayer.weapons.primary.id] ? (
+                  <img
+                    src={WEAPON_ASSET_ICONS[myPlayer.weapons.primary.id]}
+                    alt="weapon"
+                    className="h-4 max-w-[42px] object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <span className="text-base">{myPlayer.weapons?.primary?.icon || '🔫'}</span>
+                )}
               </div>
               <div className="font-heading font-black text-sm sm:text-base text-white truncate">
                 {myPlayer.weapons?.primary?.name || 'Boş Slot'}
@@ -570,7 +618,7 @@ export default function SurvivalHUD({
             <button
               type="button"
               onClick={() => onSwitchSlot('secondary')}
-              className={`p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[145px] sm:min-w-[165px] relative overflow-hidden ${
+              className={`p-3 rounded-2xl border backdrop-blur-md transition cursor-pointer text-left min-w-[155px] sm:min-w-[175px] relative overflow-hidden ${
                 myPlayer.activeSlot === 'secondary'
                   ? 'bg-slate-900/95 border-2 border-amber-400 shadow-xl shadow-amber-500/20 ring-2 ring-amber-400/30'
                   : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600'
@@ -578,7 +626,16 @@ export default function SurvivalHUD({
             >
               <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
                 <span>[2] İKİNCİL</span>
-                <span className="text-base">{myPlayer.weapons?.secondary?.icon || '—'}</span>
+                {myPlayer.weapons?.secondary?.id && WEAPON_ASSET_ICONS[myPlayer.weapons.secondary.id] ? (
+                  <img
+                    src={WEAPON_ASSET_ICONS[myPlayer.weapons.secondary.id]}
+                    alt="weapon"
+                    className="h-4 max-w-[42px] object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <span className="text-base">{myPlayer.weapons?.secondary?.icon || '—'}</span>
+                )}
               </div>
               <div className="font-heading font-black text-sm sm:text-base text-white truncate">
                 {myPlayer.weapons?.secondary?.name || (

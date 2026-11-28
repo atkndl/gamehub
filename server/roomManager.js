@@ -234,6 +234,54 @@ export function getRoom(roomCode) {
   return rooms.get(roomCode.trim().toUpperCase()) || null;
 }
 
+export function touchRoomActivity(roomCode) {
+  const room = rooms.get(roomCode?.trim()?.toUpperCase());
+  if (room) {
+    room.lastActiveAt = Date.now();
+  }
+}
+
+/**
+ * Get active joinable rooms with online player count, selected game, etc.
+ * Also automatically purges abandoned / empty / timed out rooms (>15 minutes inactive or 0 players)
+ */
+export function getActiveRoomsList() {
+  const now = Date.now();
+  const maxInactiveMs = 15 * 60 * 1000; // 15 mins
+  const activeList = [];
+
+  for (const [code, r] of rooms.entries()) {
+    // Purge if 0 players or no connected players
+    const connectedPlayers = (r.players || []).filter(p => p.connected !== false);
+    const lastActive = r.lastActiveAt || r.createdAt || now;
+
+    if (connectedPlayers.length === 0 || (now - lastActive > maxInactiveMs)) {
+      rooms.delete(code);
+      continue;
+    }
+
+    activeList.push({
+      code: r.code,
+      hostName: r.players[0]?.name || 'Oda Sahibi',
+      hostAvatar: r.players[0]?.avatar || '👑',
+      playerCount: connectedPlayers.length,
+      maxPlayers: 12,
+      selectedGame: r.selectedGame || 'wordle',
+      gameState: r.gameState, // 'lobby' | 'playing'
+      createdAt: r.createdAt
+    });
+  }
+
+  // Sort by newest and joinable (lobby first)
+  activeList.sort((a, b) => {
+    if (a.gameState === 'lobby' && b.gameState !== 'lobby') return -1;
+    if (a.gameState !== 'lobby' && b.gameState === 'lobby') return 1;
+    return b.createdAt - a.createdAt;
+  });
+
+  return activeList;
+}
+
 export function getRoomBySocket(socketId) {
   const roomCode = socketToRoom.get(socketId);
   if (!roomCode) return null;
