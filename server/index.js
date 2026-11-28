@@ -37,11 +37,17 @@ import {
   handleLiarsBarProceedToBomb,
   handleLiarsBarCutWire,
   handleLiarsBarProceedAfterBomb,
+  selectCarColor,
+  updateRacingConfig,
+  startRacingGame,
+  handleRacingInput,
+  restartRacingGame,
   getActiveRoomsList,
   touchRoomActivity
 } from './roomManager.js';
 import { SNAKE_CLASSES } from './snakeLogic.js';
 import { WEAPONS, SCOPES, ARMORS, HELMETS } from './survivalLogic.js';
+import { RACING_CARS } from './racingLogic.js';
 import {
   getWordDetails,
   getWordsDetailsMap,
@@ -237,6 +243,64 @@ function startSurvivalLoop(room) {
 
 app.get('/api/survival/items', (req, res) => {
   res.json({ success: true, weapons: WEAPONS, scopes: SCOPES, armors: ARMORS, helmets: HELMETS });
+});
+
+// ==================== 2D RACING GAME LOOP ====================
+const racingGameLoops = new Map();
+
+function stopRacingLoop(roomCode) {
+  if (racingGameLoops.has(roomCode)) {
+    clearInterval(racingGameLoops.get(roomCode));
+    racingGameLoops.delete(roomCode);
+    console.log(`[Racing Loop Stopped] Room ${roomCode}`);
+  }
+}
+
+function startRacingLoop(room) {
+  stopRacingLoop(room.code);
+  console.log(`[Racing Loop Started] Room ${room.code} with ${room.players.length} racers`);
+
+  const loopId = setInterval(() => {
+    if (!room.racingSession || room.gameState !== 'playing') {
+      stopRacingLoop(room.code);
+      return;
+    }
+
+    const tickResult = room.racingSession.tick(Date.now());
+
+    // Broadcast live race state
+    io.to(room.code).emit('racing_state', tickResult.state);
+
+    // Broadcast race events (crashes, laps, finishes)
+    if (tickResult.events && tickResult.events.length > 0) {
+      io.to(room.code).emit('racing_events', tickResult.events);
+    }
+
+    // Check if race ended
+    if (room.racingSession.isGameOver) {
+      stopRacingLoop(room.code);
+      room.gameState = 'game_over';
+      console.log(`[Racing Game Over] Room ${room.code}`);
+      io.to(room.code).emit('racing_game_over', {
+        room,
+        winner: room.racingSession.winner?.name,
+        standings: Object.values(room.racingSession.players).map(p => ({
+          id: p.id,
+          name: p.name,
+          rank: p.rank,
+          carColor: p.carColor,
+          bestLapTime: p.bestLapTime,
+          totalTime: p.totalRaceTime
+        }))
+      });
+    }
+  }, 32); // ~31 ticks per second for smooth drifting physics
+
+  racingGameLoops.set(room.code, loopId);
+}
+
+app.get('/api/racing/cars', (req, res) => {
+  res.json({ success: true, cars: RACING_CARS });
 });
 
 io.on('connection', (socket) => {
@@ -733,12 +797,71 @@ io.on('connection', (socket) => {
     if (typeof callback === 'function') callback({ success: true });
   });
 
+  // ==================== 2D RACING SOCKETS ====================
+
+  // Select Car Color / Model
+  socket.on('select_car_color', ({ carColor }, callback) => {
+    const res = selectCarColor(socket.id, carColor);
+    if (!res) {
+      if (typeof callback === 'function') callback({ success: false });
+      return;
+    }
+    io.to(res.room.code).emit('room_updated', res.room);
+    if (typeof callback === 'function') callback({ success: true, player: res.player });
+  });
+
+  // Update Racing Config (Laps or Time Mode)
+  socket.on('update_racing_config', (config) => {
+    const room = updateRacingConfig(socket.id, config);
+    if (room && !room.error) {
+      io.to(room.code).emit('room_updated', room);
+    }
+  });
+
+  // Start Racing Game
+  socket.on('start_racing', (config, callback) => {
+    if (typeof config === 'function') {
+      callback = config;
+      config = null;
+    }
+    const result = startRacingGame(socket.id, config);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    const room = result.room;
+    console.log(`[Racing Started] Room ${room.code} with ${room.players.length} players`);
+    io.to(room.code).emit('game_started', room);
+    startRacingLoop(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
+  // Racing Player Inputs (Throttle, Brake, Steering, Handbrake, Nitro, Pit actions)
+  socket.on('racing_input', (inputData) => {
+    handleRacingInput(socket.id, inputData);
+  });
+
+  // Racing Rematch
+  socket.on('racing_rematch', (callback) => {
+    const result = restartRacingGame(socket.id);
+    if (result.error) {
+      if (typeof callback === 'function') callback({ success: false, error: result.error });
+      return;
+    }
+    const room = result.room;
+    console.log(`[Racing Rematch Started] Room ${room.code}`);
+    io.to(room.code).emit('game_started', room);
+    startRacingLoop(room);
+    if (typeof callback === 'function') callback({ success: true });
+  });
+
   // Return to Lobby
   socket.on('return_to_lobby', (callback) => {
     const room = getRoomBySocket(socket.id);
     if (room) {
       stopSnakeLoop(room.code);
       stopSurvivalLoop(room.code);
+      stopRacingLoop(room.code);
     }
     const result = returnToLobby(socket.id);
     if (result.error) {
@@ -769,6 +892,7 @@ io.on('connection', (socket) => {
       if (result.room.players.length === 0) {
         stopSnakeLoop(result.room.code);
         stopSurvivalLoop(result.room.code);
+        stopRacingLoop(result.room.code);
       }
       checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);
@@ -785,6 +909,7 @@ io.on('connection', (socket) => {
       if (result.room.players.length === 0) {
         stopSnakeLoop(result.room.code);
         stopSurvivalLoop(result.room.code);
+        stopRacingLoop(result.room.code);
       }
       checkGameCompletion(result.room);
       io.to(result.room.code).emit('room_updated', result.room);

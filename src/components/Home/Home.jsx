@@ -17,6 +17,15 @@ import {
 } from 'lucide-react';
 
 const GAME_INFO = {
+  racing: {
+    title: '2D Yarış & Drift',
+    badge: 'YENİ 🔥',
+    badgeColor: 'bg-red-100 text-red-700 border-red-200',
+    icon: '🏎️',
+    desc: 'Kenney pisti, el freniyle drift, nitro basma ve interaktif pit stop tamiri.',
+    gradient: 'from-red-50 to-white',
+    border: 'border-red-200 hover:border-red-400'
+  },
   liars_bar: {
     title: "Liar's Bar (Blöf)",
     badge: 'YENİ',
@@ -475,7 +484,7 @@ export default function Home() {
             )}
 
             {/* Game Showcase Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-2">
               {Object.entries(GAME_INFO).map(([key, info]) => (
                 <div
                   key={key}

@@ -3,15 +3,17 @@ import { useGame } from '../../context/GameContext';
 import WordleConfigModal from './WordleConfigModal';
 import SnakeClassModal, { SNAKE_CLASSES } from '../Snake/SnakeClassModal';
 import SurvivalConfigModal from '../Survival/SurvivalConfigModal';
+import RacingConfigModal from '../Racing/RacingConfigModal';
 import LiveChat from '../Common/LiveChat';
 import { Copy, Check, Share2, Play, Users, Crown, Settings2, CheckCircle2, Sparkles, Zap, Flame, Snowflake, Shield } from 'lucide-react';
 
 export default function Lobby() {
-  const { room, player, showToast, updateProfile, updateWordleConfig, startWordle, startSnake, startSurvival, startLiarsBar, selectGame } = useGame();
+  const { room, player, showToast, updateProfile, updateWordleConfig, startWordle, startSnake, startSurvival, startLiarsBar, startRacing, selectGame } = useGame();
   const [copied, setCopied] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [snakeClassModalOpen, setSnakeClassModalOpen] = useState(false);
   const [survivalModalOpen, setSurvivalModalOpen] = useState(false);
+  const [racingModalOpen, setRacingModalOpen] = useState(false);
 
   if (!room) return null;
 
@@ -77,6 +79,15 @@ export default function Lobby() {
       await startLiarsBar();
     } catch (e) {
       showToast(e.message || "Liar's Bar başlatılamadı.");
+    }
+  };
+
+  const handleStartRacing = async () => {
+    if (!isHost) return;
+    try {
+      await startRacing();
+    } catch (e) {
+      showToast(e.message || "Yarış başlatılamadı.");
     }
   };
 
@@ -535,6 +546,93 @@ export default function Lobby() {
                 )}
               </div>
             </div>
+
+            {/* Game Card: Racing & Drift */}
+            <div
+              className={`bg-white rounded-2xl p-5 border-2 transition flex flex-col justify-between shadow-xs ${
+                room.selectedGame === 'racing'
+                  ? 'border-red-500 ring-4 ring-red-500/10'
+                  : 'border-slate-200 hover:border-slate-300 opacity-90'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-red-600 via-amber-500 to-yellow-400 text-white flex items-center justify-center text-xl shadow-xs">
+                    🏎️
+                  </div>
+                  {room.selectedGame === 'racing' ? (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-900 border border-red-300 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-red-600" />
+                      Aktif Oyun
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                      YENİ! YARIŞ & DRİFT 🔥
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <h3 className="font-heading font-black text-base text-slate-900">
+                    2D Yarış & Drift (Grand Prix)
+                  </h3>
+                  <span className="text-xs">🏁</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">
+                  Pist & Çim Fizikleri • El Freni ile Drift • Pit Stop & Hasar
+                </p>
+
+                {/* Settings Pill */}
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700 font-semibold mb-4 flex items-center justify-between">
+                  <span>
+                    {room.racingConfig?.mode === 'time'
+                      ? `⏱️ ${room.racingConfig?.timeLimit / 60} Dk Süre`
+                      : `🏁 ${room.racingConfig?.laps || 3} Tur`}
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <span>🔧 Pit Servisi</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-red-600 font-bold">Space: El Freni</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setRacingModalOpen(true)}
+                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer shrink-0"
+                    title="Araç & Yarış Ayarları"
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                    <span>Garaj</span>
+                  </button>
+
+                  {isHost ? (
+                    room.selectedGame === 'racing' ? (
+                      <button
+                        onClick={handleStartRacing}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-heading font-black text-xs tracking-wide shadow-md shadow-red-500/25 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Yarışı Başlat
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => selectGame('racing')}
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 font-heading font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        Yarışı Seç
+                      </button>
+                    )
+                  ) : (
+                    <div className="flex-1 py-2.5 px-3 rounded-xl bg-slate-50 text-slate-500 font-medium text-xs text-center border border-slate-200">
+                      👑 Oda sahibi başlatabilir
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -630,6 +728,12 @@ export default function Lobby() {
       <SurvivalConfigModal
         isOpen={survivalModalOpen}
         onClose={() => setSurvivalModalOpen(false)}
+      />
+
+      {/* Racing Config Modal */}
+      <RacingConfigModal
+        isOpen={racingModalOpen}
+        onClose={() => setRacingModalOpen(false)}
       />
     </div>
   );

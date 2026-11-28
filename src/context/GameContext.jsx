@@ -18,6 +18,8 @@ export function GameProvider({ children }) {
   const [survivalState, setSurvivalState] = useState(null);
   const [survivalGameOverData, setSurvivalGameOverData] = useState(null);
   const [liarsBarState, setLiarsBarState] = useState(null);
+  const [racingState, setRacingState] = useState(null);
+  const [racingGameOverData, setRacingGameOverData] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
   // Show auto-dismissing toast
@@ -105,6 +107,8 @@ export function GameProvider({ children }) {
       setSurvivalState(null);
       setSurvivalGameOverData(null);
       setLiarsBarState(null);
+      setRacingState(null);
+      setRacingGameOverData(null);
       setOpponentProgress({});
       setRoom(updatedRoom);
       showToast('Oda lobiye döndü 🏠');
@@ -176,6 +180,31 @@ export function GameProvider({ children }) {
       showToast(`Liar's Bar Sona Erdi! Şampiyon: ${data.winner?.name} 👑`, 4000);
     }
 
+    function handleRacingState(st) {
+      setRacingState(st);
+    }
+
+    function handleRacingEvents(events) {
+      if (!Array.isArray(events)) return;
+      events.forEach(evt => {
+        if (evt.type === 'green_lights') {
+          sound.playWordSolved();
+        } else if (evt.type === 'crash') {
+          sound.playHurt();
+        } else if (evt.type === 'lap_complete') {
+          sound.playKey();
+        }
+      });
+    }
+
+    function handleRacingGameOver(data) {
+      console.log('[Socket] racing_game_over:', data);
+      setRacingGameOverData(data);
+      if (data.room) setRoom(data.room);
+      sound.playGameWin();
+      showToast(`Yarış Sona Erdi! Şampiyon: ${data.winner || 'Biri'} 🏁🏆`, 5000);
+    }
+
     socket.on('room_updated', handleRoomUpdated);
     socket.on('game_started', handleGameStarted);
     socket.on('opponent_updated', handleOpponentUpdated);
@@ -190,6 +219,9 @@ export function GameProvider({ children }) {
     socket.on('survival_game_over', handleSurvivalGameOver);
     socket.on('liars_bar_state', handleLiarsBarState);
     socket.on('liars_game_over', handleLiarsGameOver);
+    socket.on('racing_state', handleRacingState);
+    socket.on('racing_events', handleRacingEvents);
+    socket.on('racing_game_over', handleRacingGameOver);
     socket.on('lobby_returned', handleLobbyReturned);
     socket.on('chat_received', handleChatReceived);
 
@@ -208,6 +240,9 @@ export function GameProvider({ children }) {
       socket.off('survival_game_over', handleSurvivalGameOver);
       socket.off('liars_bar_state', handleLiarsBarState);
       socket.off('liars_game_over', handleLiarsGameOver);
+      socket.off('racing_state', handleRacingState);
+      socket.off('racing_events', handleRacingEvents);
+      socket.off('racing_game_over', handleRacingGameOver);
       socket.off('lobby_returned', handleLobbyReturned);
       socket.off('chat_received', handleChatReceived);
     };
@@ -451,6 +486,40 @@ export function GameProvider({ children }) {
     });
   }, [showToast]);
 
+  // Racing Actions
+  const selectCarColor = useCallback((carColor) => {
+    socket.emit('select_car_color', { carColor }, (res) => {
+      if (!res?.success) showToast('Araba seçilemedi');
+    });
+  }, [showToast]);
+
+  const updateRacingConfig = useCallback((config) => {
+    socket.emit('update_racing_config', config);
+  }, []);
+
+  const startRacing = useCallback((config = null) => {
+    return new Promise((resolve, reject) => {
+      socket.emit('start_racing', config, (res) => {
+        if (res && res.success) {
+          resolve(true);
+        } else {
+          showToast(res ? res.error : 'Yarış başlatılamadı');
+          reject(new Error(res?.error));
+        }
+      });
+    });
+  }, [showToast]);
+
+  const sendRacingInput = useCallback((inputData) => {
+    socket.emit('racing_input', inputData);
+  }, []);
+
+  const racingRematch = useCallback(() => {
+    socket.emit('racing_rematch', (res) => {
+      if (!res?.success) showToast(res ? res.error : 'Tekrar yarış başlatılamadı');
+    });
+  }, [showToast]);
+
   return (
     <GameContext.Provider
       value={{
@@ -470,6 +539,8 @@ export function GameProvider({ children }) {
         survivalState,
         survivalGameOverData,
         liarsBarState,
+        racingState,
+        racingGameOverData,
         toastMessage,
         showToast,
         createRoom,
@@ -497,7 +568,12 @@ export function GameProvider({ children }) {
         playLiarsCards,
         challengeLiars,
         cutLiarsWire,
-        rematchLiars
+        rematchLiars,
+        selectCarColor,
+        updateRacingConfig,
+        startRacing,
+        sendRacingInput,
+        racingRematch
       }}
     >
       {children}

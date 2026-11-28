@@ -7,6 +7,7 @@ import WordleGame from './components/Wordle/WordleGame';
 import SnakeGame from './components/Snake/SnakeGame';
 import SurvivalGame from './components/Survival/SurvivalGame';
 import LiarsBarGame from './components/LiarsBar/LiarsBarGame';
+import RacingGame from './components/Racing/RacingGame';
 
 // Synchronously parse room code from URL before components mount
 try {
@@ -28,7 +29,7 @@ function GameHubApp() {
     }
   }, [room]);
 
-  const isImmersiveGame = (room?.selectedGame === 'survival' || room?.selectedGame === 'liars_bar') && room?.gameState !== 'lobby';
+  const isImmersiveGame = (room?.selectedGame === 'survival' || room?.selectedGame === 'liars_bar' || room?.selectedGame === 'racing') && room?.gameState !== 'lobby';
 
   return (
     <div className={`min-h-screen flex flex-col ${isImmersiveGame ? 'bg-slate-950 overflow-hidden' : 'bg-slate-50 text-slate-800'}`}>
@@ -39,7 +40,7 @@ function GameHubApp() {
         </div>
       )}
 
-      {/* Top Navbar - Hidden during active Survival & Liar's Bar match */}
+      {/* Top Navbar - Hidden during active Survival, Liar's Bar & Racing match */}
       {!isImmersiveGame && <Navbar />}
 
       {/* Main Content Router */}
@@ -48,6 +49,8 @@ function GameHubApp() {
           <Home />
         ) : room.gameState === 'lobby' ? (
           <Lobby />
+        ) : room.selectedGame === 'racing' ? (
+          <RacingGame />
         ) : room.selectedGame === 'liars_bar' ? (
           <LiarsBarGame />
         ) : room.selectedGame === 'survival' ? (

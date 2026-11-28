@@ -5,6 +5,7 @@ import { evaluateWordleGuess, isWordleCorrect, toTurkishLower } from './wordleLo
 import { SnakeSession, SNAKE_CLASSES } from './snakeLogic.js';
 import { SurvivalSession } from './survivalLogic.js';
 import { LiarsBarSession } from './liarsBarLogic.js';
+import { RacingSession, RACING_CARS } from './racingLogic.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -180,7 +181,13 @@ export function createRoom(socketId, playerName, avatar) {
     },
     survivalSession: null,
     liarsBarConfig: {},
-    liarsBarSession: null
+    liarsBarSession: null,
+    racingConfig: {
+      mode: 'laps', // 'laps' | 'time'
+      laps: 3,      // 3, 5, 10
+      timeLimit: 120 // 120s (2 min)
+    },
+    racingSession: null
   };
 
   rooms.set(roomCode, room);
@@ -874,6 +881,7 @@ export function returnToLobby(socketId) {
   room.snakeSession = null;
   room.survivalSession = null;
   room.liarsBarSession = null;
+  room.racingSession = null;
   room.players.forEach(p => {
     p.score = 0;
   });
@@ -885,7 +893,7 @@ export function selectGame(socketId, gameId) {
   const room = getRoomBySocket(socketId);
   if (!room || room.hostId !== socketId) return null;
   if (room.gameState !== 'lobby') return null;
-  if (!['wordle', 'snake', 'survival', 'liars_bar'].includes(gameId)) return null;
+  if (!['wordle', 'snake', 'survival', 'liars_bar', 'racing'].includes(gameId)) return null;
 
   room.selectedGame = gameId;
   return room;
@@ -1035,4 +1043,50 @@ export function handleLiarsBarProceedAfterBomb(socketId) {
   if (!room || room.gameState !== 'playing' || !room.liarsBarSession) return { error: 'Oyun aktif değil.' };
   return room.liarsBarSession.proceedAfterBomb();
 }
+
+// ==================== 2D RACING (YARIŞ & DRİFT) ====================
+
+export function selectCarColor(socketId, carColor) {
+  const room = getRoomBySocket(socketId);
+  if (!room) return null;
+  const player = room.players.find(p => p.id === socketId);
+  if (!player) return null;
+  if (!RACING_CARS[carColor]) return null;
+
+  player.carColor = carColor;
+  return { room, player };
+}
+
+export function updateRacingConfig(socketId, config) {
+  const check = verifyHost(socketId);
+  if (check.error) return check;
+  const room = check.room;
+  room.racingConfig = { ...room.racingConfig, ...config };
+  return room;
+}
+
+export function startRacingGame(socketId, customConfig = null) {
+  const check = verifyHost(socketId);
+  if (check.error) return check;
+  const room = check.room;
+
+  room.selectedGame = 'racing';
+  room.gameState = 'playing';
+  const effectiveConfig = { ...(room.racingConfig || {}), ...(customConfig || {}) };
+  room.racingSession = new RacingSession(room.code, room.players, effectiveConfig);
+  return { room, racingSession: room.racingSession };
+}
+
+export function handleRacingInput(socketId, data) {
+  const room = getRoomBySocket(socketId);
+  if (!room || room.gameState !== 'playing' || !room.racingSession) return;
+  room.racingSession.handlePlayerInput(socketId, data);
+}
+
+export function restartRacingGame(socketId) {
+  const check = verifyHost(socketId);
+  if (check.error) return check;
+  return startRacingGame(socketId);
+}
+
 
