@@ -135,15 +135,15 @@ export const SCOPES = {
 };
 
 export const ARMORS = {
-  1: { level: 1, name: 'Seviye 1 Yelek', reduction: 0.25, maxVest: 50 },
-  2: { level: 2, name: 'Seviye 2 Yelek', reduction: 0.40, maxVest: 75 },
-  3: { level: 3, name: 'Seviye 3 Yelek', reduction: 0.55, maxVest: 100 }
+  1: { level: 1, name: 'Seviye 1 Yelek', reduction: 0.25, maxVest: 50, bonusVest: 50, icon: '🦺' },
+  2: { level: 2, name: 'Seviye 2 Yelek', reduction: 0.35, maxVest: 75, bonusVest: 75, icon: '🦺' },
+  3: { level: 3, name: 'Seviye 3 Yelek (Nadir)', reduction: 0.45, maxVest: 100, bonusVest: 100, icon: '🛡️' }
 };
 
 export const HELMETS = {
-  1: { level: 1, name: 'Seviye 1 Kask', reduction: 0.15 },
-  2: { level: 2, name: 'Seviye 2 Kask', reduction: 0.25 },
-  3: { level: 3, name: 'Seviye 3 Kask', reduction: 0.40 }
+  1: { level: 1, name: 'Seviye 1 Kask', bonusHp: 20, reduction: 0.15, icon: '🪖' },
+  2: { level: 2, name: 'Seviye 2 Kask', bonusHp: 35, reduction: 0.25, icon: '🪖' },
+  3: { level: 3, name: 'Seviye 3 Kask (Nadir)', bonusHp: 50, reduction: 0.35, icon: '⛑️' }
 };
 
 function distance(x1, y1, x2, y2) {
@@ -562,12 +562,16 @@ export class SurvivalSession {
       const lx = 350 + Math.floor(Math.random() * (S - 700));
       const ly = 350 + Math.floor(Math.random() * (S - 700));
       const roll = Math.random();
-      if (roll < 0.3) {
-        const lvl = Math.random() < 0.6 ? 1 : (Math.random() < 0.75 ? 2 : 3);
-        this.spawnLoot({ x: lx, y: ly, type: 'vest', level: lvl, name: ARMORS[lvl].name, icon: '🦺' });
-      } else if (roll < 0.5) {
-        const lvl = Math.random() < 0.7 ? 1 : 2;
-        this.spawnLoot({ x: lx, y: ly, type: 'helmet', level: lvl, name: HELMETS[lvl].name, icon: '🪖' });
+      if (roll < 0.28) {
+        // Vest (65% Lvl 1, 25% Lvl 2, 10% Lvl 3)
+        const vRoll = Math.random();
+        const lvl = vRoll < 0.65 ? 1 : (vRoll < 0.90 ? 2 : 3);
+        this.spawnLoot({ x: lx, y: ly, type: 'vest', level: lvl, name: ARMORS[lvl].name, icon: ARMORS[lvl].icon, maxVest: ARMORS[lvl].maxVest, bonusVest: ARMORS[lvl].bonusVest });
+      } else if (roll < 0.52) {
+        // Helmet (65% Lvl 1, 25% Lvl 2, 10% Lvl 3)
+        const hRoll = Math.random();
+        const lvl = hRoll < 0.65 ? 1 : (hRoll < 0.90 ? 2 : 3);
+        this.spawnLoot({ x: lx, y: ly, type: 'helmet', level: lvl, name: HELMETS[lvl].name, icon: HELMETS[lvl].icon, bonusHp: HELMETS[lvl].bonusHp });
       } else if (roll < 0.75) {
         this.spawnLoot({ x: lx, y: ly, type: 'heal', itemKey: 'soda', name: 'Enerji İçeceği', icon: '🥤' });
       } else {
@@ -614,8 +618,14 @@ export class SurvivalSession {
       const s = scopeRoll < 0.65 ? '2x' : (scopeRoll < 0.94 ? '4x' : '8x');
       drops.push({ type: 'scope', itemKey: s, name: SCOPES[s].name, icon: '🔭' });
     } else if (roll < 0.85) {
-      const lvl = Math.random() < 0.6 ? 2 : 3;
-      drops.push({ type: 'vest', level: lvl, name: ARMORS[lvl].name, icon: '🦺' });
+      const isHelmet = Math.random() < 0.5;
+      const lvlRoll = Math.random();
+      const lvl = lvlRoll < 0.60 ? 1 : (lvlRoll < 0.88 ? 2 : 3);
+      if (isHelmet) {
+        drops.push({ type: 'helmet', level: lvl, name: HELMETS[lvl].name, icon: HELMETS[lvl].icon, bonusHp: HELMETS[lvl].bonusHp });
+      } else {
+        drops.push({ type: 'vest', level: lvl, name: ARMORS[lvl].name, icon: ARMORS[lvl].icon, maxVest: ARMORS[lvl].maxVest, bonusVest: ARMORS[lvl].bonusVest });
+      }
     } else {
       drops.push({ type: 'heal', itemKey: 'medkit', name: 'İlk Yardım', icon: '🩹' });
       drops.push({ type: 'heal', itemKey: 'soda', name: 'Enerji İçeceği', icon: '🥤' });
@@ -740,38 +750,122 @@ export class SurvivalSession {
     }
   }
 
+  recalculatePlayerMaxHp(p) {
+    const baseHp = 100;
+    const helmetBonus = (p.helmetLevel && HELMETS[p.helmetLevel]) ? HELMETS[p.helmetLevel].bonusHp : 0;
+    const prevMax = p.maxHp || 100;
+    const newMax = baseHp + helmetBonus;
+    p.maxHp = newMax;
+    // When maxHp increases from helmet, give the player the HP difference immediately!
+    if (newMax > prevMax) {
+      p.hp = Math.min(newMax, p.hp + (newMax - prevMax));
+    } else if (p.hp > newMax) {
+      p.hp = newMax;
+    }
+  }
+
   pickupNearestLoot(p) {
+    // Find closest loot within 80px
+    let closestItem = null;
+    let closestDist = 80;
+    let closestIndex = -1;
+
     for (let i = 0; i < this.loot.length; i++) {
       const item = this.loot[i];
-      if (distance(p.x, p.y, item.x, item.y) <= 80) {
-        if (item.type === 'weapon') {
-          const wObj = { ...WEAPONS[item.itemKey], ammo: WEAPONS[item.itemKey].magSize, isReloading: false };
-          if (!p.weapons.secondary) {
-            p.weapons.secondary = wObj;
-            p.activeSlot = 'secondary';
-          } else {
-            p.weapons[p.activeSlot === 'melee' ? 'primary' : p.activeSlot] = wObj;
-          }
-        } else if (item.type === 'scope') {
-          p.scope = item.itemKey;
-        } else if (item.type === 'vest') {
-          if (item.level > p.vestLevel || p.vest <= 0) {
-            p.vestLevel = item.level;
-            p.vest = ARMORS[item.level].maxVest;
-          }
-        } else if (item.type === 'helmet') {
-          if (item.level > p.helmetLevel) {
-            p.helmetLevel = item.level;
-          }
-        } else if (item.type === 'heal') {
-          p.heals[item.itemKey] = (p.heals[item.itemKey] || 0) + 1;
-        } else if (item.type === 'ammo') {
-          p.ammo[item.itemKey] = (p.ammo[item.itemKey] || 0) + (item.count || 30);
-        }
-
-        this.loot.splice(i, 1);
-        break;
+      const d = distance(p.x, p.y, item.x, item.y);
+      if (d <= closestDist) {
+        closestDist = d;
+        closestItem = item;
+        closestIndex = i;
       }
+    }
+
+    if (!closestItem || closestIndex === -1) return;
+
+    let dropItem = null;
+
+    if (closestItem.type === 'weapon') {
+      const wObj = { ...WEAPONS[closestItem.itemKey], ammo: closestItem.ammo ?? WEAPONS[closestItem.itemKey].magSize, isReloading: false };
+      if (!p.weapons.primary) {
+        p.weapons.primary = wObj;
+        p.activeSlot = 'primary';
+      } else if (!p.weapons.secondary) {
+        p.weapons.secondary = wObj;
+        p.activeSlot = 'secondary';
+      } else {
+        // Both gun slots full: replace currently active slot (or primary if melee)
+        const targetSlot = p.activeSlot === 'secondary' ? 'secondary' : 'primary';
+        const oldW = p.weapons[targetSlot];
+        if (oldW && !oldW.isMelee) {
+          dropItem = {
+            type: 'weapon',
+            itemKey: oldW.id,
+            name: oldW.name,
+            icon: oldW.icon,
+            ammo: oldW.ammo
+          };
+        }
+        p.weapons[targetSlot] = wObj;
+      }
+    } else if (closestItem.type === 'scope') {
+      // If player already has a scope (other than default 1x), drop it back to the ground!
+      if (p.scope && p.scope !== '1x') {
+        dropItem = {
+          type: 'scope',
+          itemKey: p.scope,
+          name: SCOPES[p.scope]?.name || `${p.scope} Dürbün`,
+          icon: '🔭'
+        };
+      }
+      p.scope = closestItem.itemKey;
+    } else if (closestItem.type === 'vest') {
+      // If player already has a vest, drop old vest with its remaining shield!
+      if (p.vestLevel > 0) {
+        dropItem = {
+          type: 'vest',
+          level: p.vestLevel,
+          name: ARMORS[p.vestLevel].name,
+          icon: ARMORS[p.vestLevel].icon,
+          maxVest: ARMORS[p.vestLevel].maxVest,
+          currentVest: p.vest
+        };
+      }
+      p.vestLevel = closestItem.level;
+      p.vest = closestItem.currentVest !== undefined ? closestItem.currentVest : ARMORS[closestItem.level].maxVest;
+    } else if (closestItem.type === 'helmet') {
+      // If player already has a helmet, drop old helmet!
+      const oldLvl = p.helmetLevel || 0;
+      if (oldLvl > 0) {
+        dropItem = {
+          type: 'helmet',
+          level: oldLvl,
+          name: HELMETS[oldLvl].name,
+          icon: HELMETS[oldLvl].icon,
+          bonusHp: HELMETS[oldLvl].bonusHp
+        };
+      }
+      p.helmetLevel = closestItem.level;
+      this.recalculatePlayerMaxHp(p);
+    } else if (closestItem.type === 'heal') {
+      if ((p.heals[closestItem.itemKey] || 0) < 5) {
+        p.heals[closestItem.itemKey] = (p.heals[closestItem.itemKey] || 0) + 1;
+      } else {
+        return; // Full, don't consume
+      }
+    } else if (closestItem.type === 'ammo') {
+      p.ammo[closestItem.itemKey] = (p.ammo[closestItem.itemKey] || 0) + (closestItem.count || 30);
+    }
+
+    // Remove picked item from world
+    this.loot.splice(closestIndex, 1);
+
+    // If an equipped item was replaced, drop it right where the player is standing!
+    if (dropItem) {
+      this.spawnLoot({
+        x: p.x + (Math.random() * 24 - 12),
+        y: p.y + (Math.random() * 24 - 12),
+        ...dropItem
+      });
     }
   }
 
@@ -868,26 +962,23 @@ export class SurvivalSession {
 
       // Resolve Rectangular Obstacles (Walls, Containers, Crates, Buildings)
       for (const ob of this.obstacles) {
-        resolveCircleRectCollision(p, ob.x, ob.y, ob.w, ob.h);
+        if (ob.type === 'crate') {
+          // Crates shrink physically as they take damage!
+          const hpRatio = Math.max(0.15, Math.min(1, (ob.hp / (ob.maxHp || 60))));
+          const scale = 0.55 + 0.45 * hpRatio;
+          const curW = ob.w * scale;
+          const curH = ob.h * scale;
+          const curX = ob.x + (ob.w - curW) / 2;
+          const curY = ob.y + (ob.h - curH) / 2;
+          resolveCircleRectCollision(p, curX, curY, curW, curH);
+        } else {
+          resolveCircleRectCollision(p, ob.x, ob.y, ob.w, ob.h);
+        }
       }
 
       // Resolve Circular Obstacles (Trees, Rocks, Barrels)
       for (const cob of this.circularObstacles) {
         resolveCircleCircleCollision(p, cob.x, cob.y, cob.radius);
-      }
-
-      // Auto-pickup nearby ammo & medkits
-      for (let i = this.loot.length - 1; i >= 0; i--) {
-        const item = this.loot[i];
-        if (distance(p.x, p.y, item.x, item.y) <= p.radius + 22) {
-          if (item.type === 'ammo') {
-            p.ammo[item.itemKey] = (p.ammo[item.itemKey] || 0) + (item.count || 30);
-            this.loot.splice(i, 1);
-          } else if (item.type === 'heal' && p.heals[item.itemKey] < 4) {
-            p.heals[item.itemKey] = (p.heals[item.itemKey] || 0) + 1;
-            this.loot.splice(i, 1);
-          }
-        }
       }
 
       // Weapon reload completion
@@ -1162,7 +1253,13 @@ export class SurvivalSession {
   damagePlayer(victim, rawDmg, shooter, weaponId, events) {
     let finalDmg = rawDmg;
 
-    if (victim.vestLevel > 0 && victim.vest > 0) {
+    // Helmet damage reduction
+    if (victim.helmetLevel > 0 && HELMETS[victim.helmetLevel]) {
+      finalDmg *= (1 - HELMETS[victim.helmetLevel].reduction);
+    }
+
+    // Vest armor damage absorption
+    if (victim.vestLevel > 0 && victim.vest > 0 && ARMORS[victim.vestLevel]) {
       const red = ARMORS[victim.vestLevel].reduction;
       const absorbed = rawDmg * red;
       victim.vest = Math.max(0, victim.vest - absorbed);
@@ -1203,7 +1300,45 @@ export class SurvivalSession {
         type: 'weapon',
         itemKey: victim.weapons.primary.id,
         name: victim.weapons.primary.name,
-        icon: victim.weapons.primary.icon
+        icon: victim.weapons.primary.icon,
+        ammo: victim.weapons.primary.ammo
+      });
+    }
+
+    if (victim.weapons.secondary && !victim.weapons.secondary.isMelee) {
+      this.spawnLoot({
+        x: victim.x + (Math.random() * 30 - 15),
+        y: victim.y + (Math.random() * 30 - 15),
+        type: 'weapon',
+        itemKey: victim.weapons.secondary.id,
+        name: victim.weapons.secondary.name,
+        icon: victim.weapons.secondary.icon,
+        ammo: victim.weapons.secondary.ammo
+      });
+    }
+
+    if (victim.vestLevel > 0 && ARMORS[victim.vestLevel]) {
+      this.spawnLoot({
+        x: victim.x + (Math.random() * 30 - 15),
+        y: victim.y + (Math.random() * 30 - 15),
+        type: 'vest',
+        level: victim.vestLevel,
+        name: ARMORS[victim.vestLevel].name,
+        icon: ARMORS[victim.vestLevel].icon,
+        maxVest: ARMORS[victim.vestLevel].maxVest,
+        currentVest: victim.vest
+      });
+    }
+
+    if (victim.helmetLevel > 0 && HELMETS[victim.helmetLevel]) {
+      this.spawnLoot({
+        x: victim.x + (Math.random() * 30 - 15),
+        y: victim.y + (Math.random() * 30 - 15),
+        type: 'helmet',
+        level: victim.helmetLevel,
+        name: HELMETS[victim.helmetLevel].name,
+        icon: HELMETS[victim.helmetLevel].icon,
+        bonusHp: HELMETS[victim.helmetLevel].bonusHp
       });
     }
 

@@ -16,7 +16,9 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
   const prevHpRef = useRef(null);
   const damageFlashRef = useRef(0);
   const wetUntilRef = useRef(0);
-  const sparksRef = useRef([]); // Metallic ricochet sparks
+  const sparksRef = useRef([]); // Metallic ricochet sparks & wood debris
+  const prevCrateHpRef = useRef({});
+  const prevCratePosRef = useRef({});
 
   // Handle Mouse Aiming & Shooting
   useEffect(() => {
@@ -265,28 +267,55 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           ctx.save();
 
           if (ob.type === 'crate') {
-            // Wooden Breakable Crate
+            // Wooden Breakable Crate - Kademeli küçülme ve kırılma efekti!
+            const hpRatio = Math.max(0.15, Math.min(1, (ob.hp / (ob.maxHp || 60))));
+            const scale = 0.55 + 0.45 * hpRatio;
+            const curW = ob.w * scale;
+            const curH = ob.h * scale;
+            const drawX = ob.x + (ob.w - curW) / 2;
+            const drawY = ob.y + (ob.h - curH) / 2;
+
+            // Base wood crate
             ctx.fillStyle = '#854d0e';
-            ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+            ctx.fillRect(drawX, drawY, curW, curH);
 
             // Crate slats & diagonals
             ctx.strokeStyle = '#451a03';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(ob.x + 2, ob.y + 2, ob.w - 4, ob.h - 4);
+            ctx.lineWidth = Math.max(1.5, 3 * scale);
+            ctx.strokeRect(drawX + 2, drawY + 2, curW - 4, curH - 4);
             ctx.beginPath();
-            ctx.moveTo(ob.x, ob.y);
-            ctx.lineTo(ob.x + ob.w, ob.y + ob.h);
-            ctx.moveTo(ob.x + ob.w, ob.y);
-            ctx.lineTo(ob.x, ob.y + ob.h);
+            ctx.moveTo(drawX, drawY);
+            ctx.lineTo(drawX + curW, drawY + curH);
+            ctx.moveTo(drawX + curW, drawY);
+            ctx.lineTo(drawX, drawY + curH);
             ctx.stroke();
 
+            // Fracture cracks if damaged
+            if (hpRatio < 0.8) {
+              ctx.strokeStyle = 'rgba(20, 10, 5, 0.85)';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(drawX + curW * 0.3, drawY + 2);
+              ctx.lineTo(drawX + curW * 0.48, drawY + curH * 0.5);
+              ctx.lineTo(drawX + curW * 0.38, drawY + curH - 2);
+              ctx.stroke();
+            }
+            if (hpRatio < 0.45) {
+              ctx.strokeStyle = 'rgba(15, 7, 3, 0.95)';
+              ctx.lineWidth = 2.5;
+              ctx.beginPath();
+              ctx.moveTo(drawX + 2, drawY + curH * 0.6);
+              ctx.lineTo(drawX + curW * 0.55, drawY + curH * 0.42);
+              ctx.lineTo(drawX + curW - 2, drawY + curH * 0.3);
+              ctx.stroke();
+            }
+
             // Crate HP bar if damaged
-            if (ob.hp < ob.maxHp) {
-              const hpPct = ob.hp / ob.maxHp;
-              ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-              ctx.fillRect(ob.x + 4, ob.y - 10, ob.w - 8, 4);
-              ctx.fillStyle = '#ef4444';
-              ctx.fillRect(ob.x + 4, ob.y - 10, (ob.w - 8) * hpPct, 4);
+            if (ob.hp < (ob.maxHp || 60)) {
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+              ctx.fillRect(drawX + 2, drawY - 9, curW - 4, 3.5);
+              ctx.fillStyle = hpRatio > 0.5 ? '#eab308' : '#ef4444';
+              ctx.fillRect(drawX + 2, drawY - 9, (curW - 4) * hpRatio, 3.5);
             }
           } else if (ob.type === 'container') {
             // Shipping Container (Corrugated metal box - BULLETS RICOCHET OFF THIS!)
@@ -685,6 +714,81 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         ctx.lineWidth = 8;
         ctx.stroke();
 
+        ctx.restore();
+      }
+
+      // Track crate damage and spawn wooden splinter particles
+      if (Array.isArray(curState?.obstacles)) {
+        const curCrateMap = {};
+        curState.obstacles.forEach(ob => {
+          if (ob.type === 'crate') {
+            curCrateMap[ob.id] = ob.hp;
+            const prevHp = prevCrateHpRef.current[ob.id];
+            if (prevHp !== undefined && ob.hp < prevHp) {
+              // Crate took damage: spawn flying wood splinter chips
+              const cx = ob.x + ob.w / 2;
+              const cy = ob.y + ob.h / 2;
+              const colors = ['#854d0e', '#a16207', '#ca8a04', '#713f12', '#d97706'];
+              for (let i = 0; i < 8; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const spd = 2 + Math.random() * 4.5;
+                sparksRef.current.push({
+                  x: cx + Math.cos(angle) * 10,
+                  y: cy + Math.sin(angle) * 10,
+                  vx: Math.cos(angle) * spd,
+                  vy: Math.sin(angle) * spd,
+                  size: 3 + Math.random() * 3.5,
+                  color: colors[Math.floor(Math.random() * colors.length)],
+                  life: 1.0
+                });
+              }
+            }
+            prevCratePosRef.current[ob.id] = { x: ob.x + ob.w / 2, y: ob.y + ob.h / 2 };
+          }
+        });
+
+        // Detect shattered crates (existed in prev frame, no longer in current)
+        Object.keys(prevCrateHpRef.current).forEach(id => {
+          if (curCrateMap[id] === undefined) {
+            const pos = prevCratePosRef.current[id];
+            if (pos) {
+              const colors = ['#854d0e', '#a16207', '#ca8a04', '#713f12', '#451a03', '#f59e0b'];
+              for (let i = 0; i < 18; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const spd = 3 + Math.random() * 6;
+                sparksRef.current.push({
+                  x: pos.x + Math.cos(angle) * 12,
+                  y: pos.y + Math.sin(angle) * 12,
+                  vx: Math.cos(angle) * spd,
+                  vy: Math.sin(angle) * spd,
+                  size: 4 + Math.random() * 4,
+                  color: colors[Math.floor(Math.random() * colors.length)],
+                  life: 1.2
+                });
+              }
+              delete prevCratePosRef.current[id];
+            }
+          }
+        });
+        prevCrateHpRef.current = curCrateMap;
+      }
+
+      // Render & update active particle sparks & wood debris
+      for (let sIdx = sparksRef.current.length - 1; sIdx >= 0; sIdx--) {
+        const spark = sparksRef.current[sIdx];
+        spark.x += spark.vx;
+        spark.y += spark.vy;
+        spark.vx *= 0.91;
+        spark.vy *= 0.91;
+        spark.life -= 0.038;
+        if (spark.life <= 0) {
+          sparksRef.current.splice(sIdx, 1);
+          continue;
+        }
+        ctx.save();
+        ctx.fillStyle = spark.color;
+        ctx.globalAlpha = Math.max(0, Math.min(1, spark.life));
+        ctx.fillRect(spark.x - spark.size / 2, spark.y - spark.size / 2, spark.size, spark.size);
         ctx.restore();
       }
 
