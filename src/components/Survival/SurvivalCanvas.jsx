@@ -38,10 +38,12 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
   const prevCratePosRef = useRef({});
   const lootImagesRef = useRef({});
 
-  // Grenade Cooking & Aim Slingshot Refs
+  // Grenade Cooking & Aim Target Refs
   const isCookingGrenadeRef = useRef(false);
   const grenadeCookStartTimeRef = useRef(0);
   const grenadeMousePosRef = useRef({ x: 0, y: 0 });
+  const grenadeLockedTargetRef = useRef(null);
+  const effectiveZoomRef = useRef(1.65);
 
   // Anti-zoom exploit keyboard & mousewheel protection
   useEffect(() => {
@@ -109,6 +111,32 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
           if ((curMyPlayer.grenades || 0) > 0) {
             isCookingGrenadeRef.current = true;
             grenadeCookStartTimeRef.current = Date.now();
+
+            // Lock selected world target position on click
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const camX = smoothCamRef.current.x;
+            const camY = smoothCamRef.current.y;
+            const zoom = effectiveZoomRef.current || 1.65;
+            const worldTargetX = camX + (mouseX - rect.width / 2) / zoom;
+            const worldTargetY = camY + (mouseY - rect.height / 2) / zoom;
+
+            const curPx = localPredictedRef.current.initialized ? localPredictedRef.current.x : (curMyPlayer.x || 2100);
+            const curPy = localPredictedRef.current.initialized ? localPredictedRef.current.y : (curMyPlayer.y || 2100);
+            const dx = worldTargetX - curPx;
+            const dy = worldTargetY - curPy;
+            const rawDist = Math.hypot(dx, dy);
+            const MAX_RANGE = 700;
+            const targetDist = Math.min(MAX_RANGE, Math.max(50, rawDist));
+            const targetAngle = Math.atan2(dy, dx);
+
+            grenadeLockedTargetRef.current = {
+              x: curPx + Math.cos(targetAngle) * targetDist,
+              y: curPy + Math.sin(targetAngle) * targetDist,
+              dist: targetDist,
+              angle: targetAngle
+            };
             return;
           }
         }
@@ -120,24 +148,28 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       if (e.button === 0) {
         if (isCookingGrenadeRef.current) {
           isCookingGrenadeRef.current = false;
-          const rect = canvas.getBoundingClientRect();
-          const centerX = rect.width / 2;
-          const centerY = rect.height / 2;
-          const dx = grenadeMousePosRef.current.x - centerX;
-          const dy = grenadeMousePosRef.current.y - centerY;
-          const dragDist = Math.hypot(dx, dy);
-          const angle = Math.atan2(dy, dx);
-
-          // Slingshot launch velocity proportional to aim drag distance
-          const speed = Math.min(22, Math.max(7, dragDist * 0.08));
-          const vx = Math.cos(angle) * speed;
-          const vy = Math.sin(angle) * speed;
+          const locked = grenadeLockedTargetRef.current;
           const elapsed = (Date.now() - grenadeCookStartTimeRef.current) / 1000;
           const fuseRemaining = Math.max(0.15, 3.0 - elapsed);
 
-          if (fuseRemaining > 0 && onAction) {
-            onAction({ action: 'throw_grenade', vx, vy, fuseRemaining });
+          if (locked && fuseRemaining > 0) {
+            // Power progress reaches 1.0 (player position) in at most 1.0 second
+            const power = Math.min(1.0, Math.max(0.20, elapsed / 1.0));
+            const finalDist = locked.dist * power;
+
+            // Velocity calculation so grenade glides and lands at finalDist with 0.94 decay
+            const ticks = Math.max(1, Math.round(fuseRemaining * 20));
+            const decaySum = (1 - Math.pow(0.94, ticks)) / 0.06;
+            const speed = Math.min(42, Math.max(6, finalDist / Math.max(1, decaySum)));
+
+            const vx = Math.cos(locked.angle) * speed;
+            const vy = Math.sin(locked.angle) * speed;
+
+            if (onAction) {
+              onAction({ action: 'throw_grenade', vx, vy, fuseRemaining });
+            }
           }
+          grenadeLockedTargetRef.current = null;
           return;
         }
         onStopShoot();
@@ -187,6 +219,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
         if (elapsed >= 3.0) {
           // Explode in hand!
           isCookingGrenadeRef.current = false;
+          grenadeLockedTargetRef.current = null;
           if (onAction) {
             onAction({ action: 'grenade_cook_explode' });
           }
@@ -263,6 +296,7 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
       const screenDiag = Math.hypot(width, height);
       const resolutionFactor = screenDiag / refDiag;
       const effectiveZoom = zoom * Math.max(0.75, resolutionFactor);
+      effectiveZoomRef.current = effectiveZoom;
 
       // Viewport culling boundaries (only render what is visible + small buffer)
       const halfW = (width / 2) / effectiveZoom + 120;
@@ -993,62 +1027,164 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
 
           ctx.restore();
 
-          // --- GRENADE SLINGSHOT TRAJECTORY & 3.0s COOKING COUNTDOWN ---
-          if (isSelf && isCookingGrenadeRef.current) {
-            const elapsed = (Date.now() - grenadeCookStartTimeRef.current) / 1000;
-            const fuseSec = Math.max(0, 3.0 - elapsed);
-            const rect = canvas.getBoundingClientRect();
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-            const dx = grenadeMousePosRef.current.x - centerX;
-            const dy = grenadeMousePosRef.current.y - centerY;
-            const dragDist = Math.hypot(dx, dy);
-            const aimAng = Math.atan2(dy, dx);
-            const launchSpeed = Math.min(22, Math.max(7, dragDist * 0.08));
+          // --- TACTICAL GRENADE: AIM PREVIEW & DISTANCE-STRIP THROW MECHANIC ---
+          const isGrenadeEquipped = isSelf && p.activeSlot === 'grenade' && (p.grenades || 0) > 0;
 
-            // Dotted Slingshot Flight Path Trajectory
+          // 1. Hovering Aim Preview (Mouse cursor moving around, deciding where to throw before clicking)
+          if (isGrenadeEquipped && !isCookingGrenadeRef.current) {
+            const mX = grenadeMousePosRef.current.x;
+            const mY = grenadeMousePosRef.current.y;
+            const aimWorldX = camX + (mX - width / 2) / effectiveZoom;
+            const aimWorldY = camY + (mY - height / 2) / effectiveZoom;
+            const dx = aimWorldX - renderX;
+            const dy = aimWorldY - renderY;
+            const rawDist = Math.hypot(dx, dy);
+            const MAX_RANGE = 700;
+            const targetDist = Math.min(MAX_RANGE, Math.max(50, rawDist));
+            const angle = Math.atan2(dy, dx);
+            const previewX = renderX + Math.cos(angle) * targetDist;
+            const previewY = renderY + Math.sin(angle) * targetDist;
+
             ctx.save();
-            ctx.setLineDash([7, 7]);
-            ctx.strokeStyle = fuseSec > 1.2 ? '#f59e0b' : '#ef4444';
-            ctx.lineWidth = 3;
 
-            let simX = renderX;
-            let simY = renderY;
-            let simVx = Math.cos(aimAng) * launchSpeed;
-            let simVy = Math.sin(aimAng) * launchSpeed;
-
+            // Dotted aim guide line from player to target preview
             ctx.beginPath();
-            ctx.moveTo(simX, simY);
-            const steps = Math.min(50, Math.round(fuseSec * 22));
-            for (let step = 0; step < steps; step++) {
-              simX += simVx;
-              simY += simVy;
-              simVx *= 0.94;
-              simVy *= 0.94;
-              ctx.lineTo(simX, simY);
-            }
+            ctx.setLineDash([7, 7]);
+            ctx.moveTo(renderX, renderY);
+            ctx.lineTo(previewX, previewY);
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.75)';
+            ctx.lineWidth = 2.5;
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // Landing Impact Area Preview Circle (Radius: 230)
+            // Red blast radius preview circle (Radius 230)
             ctx.beginPath();
-            ctx.arc(simX, simY, 230, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+            ctx.arc(previewX, previewY, 230, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.10)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.65)';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            // Center crosshair marker
+            ctx.beginPath();
+            ctx.arc(previewX, previewY, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#ef4444';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
             ctx.stroke();
-            ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
-            ctx.fill();
 
-            // Landing marker crosshair
+            // Crosshair lines
             ctx.beginPath();
-            ctx.arc(simX, simY, 12, 0, Math.PI * 2);
+            ctx.moveTo(previewX - 16, previewY);
+            ctx.lineTo(previewX + 16, previewY);
+            ctx.moveTo(previewX, previewY - 16);
+            ctx.lineTo(previewX, previewY + 16);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Aim hint tag
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText(`🎯 HEDEF SEÇ (${Math.round(targetDist)}m) - [SOL TIK BASILI TUT]`, previewX, previewY - 245);
+
+            ctx.restore();
+          }
+
+          // 2. Cooking & Locked Target Distance Strip (Sol tıka basıldığı an geri sayım başlar, kırmızı daire kilitlenir ve 1 saniyede bize doğru yaklaşan şerit gelir!)
+          if (isGrenadeEquipped && isCookingGrenadeRef.current && grenadeLockedTargetRef.current) {
+            const locked = grenadeLockedTargetRef.current;
+            const targetX = locked.x;
+            const targetY = locked.y;
+            const elapsed = (Date.now() - grenadeCookStartTimeRef.current) / 1000;
+            const fuseSec = Math.max(0, 3.0 - elapsed);
+
+            // Strip travels from locked target circle center back towards player center in max 1.0 second!
+            const stripProgress = Math.min(1.0, elapsed / 1.0); // 0.0 -> 1.0 in 1 second
+            const currentPower = Math.min(1.0, Math.max(0.20, stripProgress));
+
+            ctx.save();
+
+            // A. Fixed Red Blast Circle (Radius 230) permanently anchored at chosen target spot
+            ctx.beginPath();
+            ctx.arc(targetX, targetY, 230, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.16)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.90)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Target center bullseye
+            ctx.beginPath();
+            ctx.arc(targetX, targetY, 11, 0, Math.PI * 2);
             ctx.fillStyle = '#ef4444';
             ctx.fill();
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2.5;
             ctx.stroke();
 
-            // Cooking Countdown Ring around Player
+            // Locked target label
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillStyle = '#fca5a5';
+            ctx.textAlign = 'center';
+            ctx.fillText('📍 SEÇİLEN SABİT HEDEF NOKTASI', targetX, targetY - 245);
+
+            // B. Trajectory base line connecting player and target
+            ctx.beginPath();
+            ctx.moveTo(renderX, renderY);
+            ctx.lineTo(targetX, targetY);
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // C. Smooth Glowing Distance Strip traveling from target circle back towards player center:
+            const stripHeadX = targetX - (targetX - renderX) * stripProgress;
+            const stripHeadY = targetY - (targetY - renderY) * stripProgress;
+
+            // Strip trail from target circle center to the approaching strip head
+            ctx.beginPath();
+            ctx.moveTo(targetX, targetY);
+            ctx.lineTo(stripHeadX, stripHeadY);
+            ctx.strokeStyle = stripProgress >= 1.0 ? '#22c55e' : '#f59e0b';
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // Bright traveling energy node approaching the player
+            ctx.beginPath();
+            ctx.arc(stripHeadX, stripHeadY, 8 + Math.sin(Date.now() / 80) * 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = stripProgress >= 1.0 ? '#86efac' : '#fef08a';
+            ctx.fill();
+            ctx.strokeStyle = stripProgress >= 1.0 ? '#15803d' : '#b45309';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // D. Actual landing drop spot if player releases mouse right now:
+            const dropX = renderX + (targetX - renderX) * currentPower;
+            const dropY = renderY + (targetY - renderY) * currentPower;
+
+            ctx.beginPath();
+            ctx.arc(dropX, dropY, 22 + Math.sin(Date.now() / 120) * 3, 0, Math.PI * 2);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(dropX, dropY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fill();
+
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillStyle = '#38bdf8';
+            ctx.textAlign = 'center';
+            ctx.fillText(`💣 İniş: %${Math.round(currentPower * 100)}`, dropX, dropY + 28);
+
+            // E. 3-Second Pin Cooking Countdown Ring & Banner above player
             const cookProgress = Math.min(1, elapsed / 3.0);
             ctx.beginPath();
             ctx.arc(renderX, renderY, p.radius + 15, 0, Math.PI * 2);
@@ -1069,8 +1205,8 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             ctx.lineCap = 'round';
             ctx.stroke();
 
-            // Big Bold Fuse Seconds text
-            ctx.font = '900 17px "Inter", sans-serif';
+            // Big Bold Fuse Seconds
+            ctx.font = '900 18px "Inter", sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.strokeStyle = '#000000';
@@ -1080,10 +1216,13 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             ctx.fillStyle = fuseSec > 1.2 ? '#fef08a' : '#ef4444';
             ctx.fillText(fuseText, renderX, renderY - p.radius - 28);
 
-            // Warning Banner
+            // Live status instruction banner
             ctx.font = 'bold 11px sans-serif';
-            ctx.fillStyle = '#ef4444';
-            ctx.fillText('⚠️ PİM ÇEKİLDİ! FIRLAT!', renderX, renderY - p.radius - 44);
+            ctx.fillStyle = stripProgress >= 1.0 ? '#22c55e' : '#f59e0b';
+            const statusBanner = stripProgress >= 1.0
+              ? '🔥 TAM MENZİLE ULAŞTI! ATMAK İÇİN BIRAK!'
+              : `⚠️ PİM ÇEKİLDİ! (%${Math.round(stripProgress * 100)} MESAFE AYARLANIYOR)`;
+            ctx.fillText(statusBanner, renderX, renderY - p.radius - 46);
 
             ctx.restore();
           }
