@@ -206,33 +206,68 @@ export default function SurvivalHUD({
       <div className="flex items-end justify-between w-full gap-4">
         {/* Bottom Left: Vitals (HP, Armor, Boost & Equipment) */}
         <div className="flex flex-col gap-2 pointer-events-auto">
-          {/* Status Badges Row (Scope, Helmet +HP, Vest +Armor, Wet) */}
-          <div className="flex items-center gap-2 flex-wrap max-w-sm">
-            {/* Scope Badge */}
-            <div className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/85 border border-indigo-500/40 text-xs font-bold text-indigo-300 backdrop-blur-md shadow-md">
-              <Crosshair className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{SCOPES[myPlayer.scope]?.name || '1x Görüş'}</span>
-            </div>
+          {/* Status Badges Stack (Scope, Helmet, Vest, Wet - Stacking Vertically) */}
+          <div className="flex flex-col gap-1.5 w-60 sm:w-68">
+            {/* Scope Badge (Equipped or Soft Empty) */}
+            {myPlayer.scope && myPlayer.scope !== '1x' ? (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-indigo-950/90 border border-indigo-500/50 text-xs font-bold text-indigo-300 backdrop-blur-md shadow-md">
+                <div className="flex items-center gap-1.5">
+                  <Crosshair className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Dürbün:</span>
+                </div>
+                <span className="px-2 py-0.5 rounded bg-indigo-900/90 text-white font-mono font-bold text-[10px] border border-indigo-400/40">
+                  {SCOPES[myPlayer.scope]?.name || myPlayer.scope}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-xs font-medium text-slate-500 backdrop-blur-xs">
+                <div className="flex items-center gap-1.5 opacity-60">
+                  <Crosshair className="w-3.5 h-3.5" />
+                  <span>Dürbün:</span>
+                </div>
+                <span className="italic text-[10px] text-slate-500">Boş (1x Standart)</span>
+              </div>
+            )}
 
-            {/* Helmet Badge with +HP Bonus */}
-            {myPlayer.helmetLevel > 0 && HELMETS[myPlayer.helmetLevel] && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-xs font-bold text-emerald-300 backdrop-blur-md shadow-md">
-                <span>{HELMETS[myPlayer.helmetLevel].icon || '🪖'}</span>
-                <span>{HELMETS[myPlayer.helmetLevel].name}</span>
+            {/* Helmet Badge (Equipped or Soft Empty) */}
+            {myPlayer.helmetLevel > 0 && HELMETS[myPlayer.helmetLevel] ? (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-xs font-bold text-emerald-300 backdrop-blur-md shadow-md">
+                <div className="flex items-center gap-1.5">
+                  <span>{HELMETS[myPlayer.helmetLevel].icon || '🪖'}</span>
+                  <span>{HELMETS[myPlayer.helmetLevel].name}</span>
+                </div>
                 <span className="px-1.5 py-0.5 rounded bg-emerald-900/90 text-white font-mono font-black text-[10px] border border-emerald-400/40">
                   +{HELMETS[myPlayer.helmetLevel].bonusHp} Max HP
                 </span>
               </div>
+            ) : (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-xs font-medium text-slate-500 backdrop-blur-xs">
+                <div className="flex items-center gap-1.5 opacity-60">
+                  <span>🪖</span>
+                  <span>Kask:</span>
+                </div>
+                <span className="italic text-[10px] text-slate-500">Boş (0 HP)</span>
+              </div>
             )}
 
-            {/* Vest Badge with +Armor Bonus */}
-            {myPlayer.vestLevel > 0 && ARMORS[myPlayer.vestLevel] && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-950/90 border border-sky-500/50 text-xs font-bold text-sky-300 backdrop-blur-md shadow-md">
-                <span>{ARMORS[myPlayer.vestLevel].icon || '🦺'}</span>
-                <span>{ARMORS[myPlayer.vestLevel].name}</span>
+            {/* Vest Badge (Equipped or Soft Empty) */}
+            {myPlayer.vestLevel > 0 && ARMORS[myPlayer.vestLevel] ? (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-sky-950/90 border border-sky-500/50 text-xs font-bold text-sky-300 backdrop-blur-md shadow-md">
+                <div className="flex items-center gap-1.5">
+                  <span>{ARMORS[myPlayer.vestLevel].icon || '🦺'}</span>
+                  <span>{ARMORS[myPlayer.vestLevel].name}</span>
+                </div>
                 <span className="px-1.5 py-0.5 rounded bg-sky-900/90 text-white font-mono font-black text-[10px] border border-sky-400/40">
                   +{ARMORS[myPlayer.vestLevel].maxVest} Zırh
                 </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-900/60 border border-slate-700/50 text-xs font-medium text-slate-500 backdrop-blur-xs">
+                <div className="flex items-center gap-1.5 opacity-60">
+                  <span>🦺</span>
+                  <span>Yelek:</span>
+                </div>
+                <span className="italic text-[10px] text-slate-500">Boş (0 Zırh)</span>
               </div>
             )}
 

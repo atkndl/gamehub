@@ -14,7 +14,7 @@ export const WEAPONS = {
     damage: 24,
     fireDelay: 250, // ms
     bulletSpeed: 0,
-    range: 52,
+    range: 50,
     magSize: Infinity,
     reloadTime: 0,
     isMelee: true,
@@ -27,12 +27,12 @@ export const WEAPONS = {
     id: 'm9',
     name: 'M9 Tabanca',
     icon: '🔫',
-    damage: 20,
-    fireDelay: 160,
-    bulletSpeed: 23,
-    range: 750,
+    damage: 16, // Hafif tabanca hasarı
+    fireDelay: 150, // Seri yarı-otomatik
+    bulletSpeed: 21,
+    range: 560, // Kısa menzil
     magSize: 15,
-    reloadTime: 1300,
+    reloadTime: 2800, // 2.8 saniye şarjör doldurma
     isMelee: false,
     bulletCount: 1,
     spread: 0.07,
@@ -44,15 +44,15 @@ export const WEAPONS = {
     id: 'm870',
     name: 'M870 Pompalı',
     icon: '💥',
-    damage: 17,
-    fireDelay: 700,
+    damage: 14, // 8 saçma * 14 = 112 yakın mesafe ölümcül burst!
+    fireDelay: 850, // Yavaş pompa kurma
     bulletSpeed: 20,
-    range: 480, // Kısa menzil, ölümcül saçılma
+    range: 420, // En kısa menzil, geniş saçılma
     magSize: 5,
-    reloadTime: 2000,
+    reloadTime: 3200, // 3.2 saniye
     isMelee: false,
-    bulletCount: 6,
-    spread: 0.22,
+    bulletCount: 8,
+    spread: 0.28,
     ammoType: '12g',
     color: '#f97316',
     length: 34
@@ -61,15 +61,15 @@ export const WEAPONS = {
     id: 'ak47',
     name: 'AK-47',
     icon: '⚡',
-    damage: 26,
-    fireDelay: 125,
-    bulletSpeed: 26,
-    range: 1100,
+    damage: 34, // Ağır 7.62 vuruş gücü (Zırhsıza 3 vuruşta ölüm!)
+    fireDelay: 140, // Güçlü ama kontrollü seri atış
+    bulletSpeed: 27,
+    range: 1150, // Orta-uzun menzil
     magSize: 30,
-    reloadTime: 1800,
+    reloadTime: 3000, // 3.0 saniye
     isMelee: false,
     bulletCount: 1,
-    spread: 0.08,
+    spread: 0.085,
     ammoType: '762',
     color: '#ef4444',
     length: 38
@@ -78,15 +78,15 @@ export const WEAPONS = {
     id: 'm4a1',
     name: 'M4A1',
     icon: '🎯',
-    damage: 23,
-    fireDelay: 100,
-    bulletSpeed: 27,
-    range: 1200,
+    damage: 23, // Dengeli 5.56 hasarı
+    fireDelay: 95, // Hızlı seri atış
+    bulletSpeed: 31, // Çok hızlı mermi
+    range: 1250, // Uzun menzil
     magSize: 30,
-    reloadTime: 1700,
+    reloadTime: 2800, // 2.8 saniye
     isMelee: false,
     bulletCount: 1,
-    spread: 0.05,
+    spread: 0.035, // Lazer gibi nokta isabet
     ammoType: '556',
     color: '#3b82f6',
     length: 36
@@ -95,15 +95,15 @@ export const WEAPONS = {
     id: 'mosin',
     name: 'Mosin Keskin Nişancı',
     icon: '🔭',
-    damage: 88, // Yüksek hasarlı keskin nişancı
-    fireDelay: 1000,
-    bulletSpeed: 45, // Çok hızlı ve uzun menzilli mermi
-    range: 2600, // Dürbünle uzaktan vurabilmek için yüksek menzil
+    damage: 95, // Devasa tek atış hasarı (Neredeyse tekte indiren bolt-action)
+    fireDelay: 1400, // Yavaş kurma
+    bulletSpeed: 52, // Işık hızında mermi
+    range: 2800, // Ekranın tamamını ve dürbün mesafesini kapsayan maksimum menzil
     magSize: 5,
-    reloadTime: 2200,
+    reloadTime: 3400, // 3.4 saniye
     isMelee: false,
     bulletCount: 1,
-    spread: 0.006, // Lazer gibi isabetli
+    spread: 0.003, // Kusursuz keskin nişancı isabeti
     ammoType: '762',
     color: '#a855f7',
     length: 46
@@ -112,15 +112,15 @@ export const WEAPONS = {
     id: 'mp5',
     name: 'MP5 Hafif Makineli',
     icon: '🔥',
-    damage: 17,
-    fireDelay: 90,
+    damage: 14, // Düşük tek mermi hasarı
+    fireDelay: 75, // Çok seri otomatik (saniyede 13 mermi!)
     bulletSpeed: 23,
-    range: 800,
+    range: 680, // Kısa-orta menzil
     magSize: 30,
-    reloadTime: 1400,
+    reloadTime: 2900, // 2.9 saniye
     isMelee: false,
     bulletCount: 1,
-    spread: 0.10,
+    spread: 0.12,
     ammoType: '9mm',
     color: '#10b981',
     length: 28
@@ -295,15 +295,46 @@ export class SurvivalSession {
 
   getSpawnPosition(idx, total) {
     const S = MAP_SIZE;
-    const margin = 450;
-    // Up to 50 attempts to find a safe open spot
-    for (let attempt = 0; attempt < 50; attempt++) {
-      const candX = margin + Math.random() * (S - margin * 2);
-      const candY = margin + Math.random() * (S - margin * 2);
+    // 8 distinct non-overlapping geographic sectors across 4200x4200 map
+    const sectors = [
+      { name: 'Kuzeybatı', minX: 550, maxX: 1450, minY: 550, maxY: 1450 },
+      { name: 'Kuzey',     minX: 1800, maxX: 2400, minY: 550, maxY: 1100 },
+      { name: 'Kuzeydoğu', minX: 2750, maxX: 3650, minY: 550, maxY: 1450 },
+      { name: 'Doğu',      minX: 3100, maxX: 3650, minY: 1800, maxY: 2400 },
+      { name: 'Güneydoğu', minX: 2750, maxX: 3650, minY: 2750, maxY: 3650 },
+      { name: 'Güney',     minX: 1800, maxX: 2400, minY: 3100, maxY: 3650 },
+      { name: 'Güneybatı', minX: 550, maxX: 1450, minY: 2750, maxY: 3650 },
+      { name: 'Batı',      minX: 550, maxX: 1100, minY: 1800, maxY: 2400 }
+    ];
 
-      // Check collision with rectangular obstacles (walls, houses, containers, crates)
+    if (!this.shuffledSectors) {
+      this.shuffledSectors = [...sectors].sort(() => Math.random() - 0.5);
+    }
+
+    const assignedSector = this.shuffledSectors[idx % this.shuffledSectors.length];
+
+    // Try up to 60 candidates inside this player's assigned sector
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const candX = assignedSector.minX + Math.random() * (assignedSector.maxX - assignedSector.minX);
+      const candY = assignedSector.minY + Math.random() * (assignedSector.maxY - assignedSector.minY);
+
+      // Check distance to ALL other already-spawned players (MINIMUM 750px distance - NEVER DIPDIPE!)
+      let tooClose = false;
+      if (this.players) {
+        for (const existingPlayer of Object.values(this.players)) {
+          if (existingPlayer && existingPlayer.x && existingPlayer.y) {
+            if (distance(candX, candY, existingPlayer.x, existingPlayer.y) < 750) {
+              tooClose = true;
+              break;
+            }
+          }
+        }
+      }
+      if (tooClose) continue;
+
+      // Check collision with obstacles (houses, walls, containers, crates)
       let collides = false;
-      const safeBuffer = 65;
+      const safeBuffer = 50;
       if (Array.isArray(this.obstacles)) {
         for (const ob of this.obstacles) {
           if (
@@ -319,7 +350,7 @@ export class SurvivalSession {
       }
       if (collides) continue;
 
-      // Check collision with circular obstacles (trees, rocks, barrels)
+      // Check circular obstacles (trees, rocks, barrels)
       if (Array.isArray(this.circularObstacles)) {
         for (const cob of this.circularObstacles) {
           if (distance(candX, candY, cob.x, cob.y) < cob.radius + safeBuffer) {
@@ -333,7 +364,7 @@ export class SurvivalSession {
       // Check water ponds (don't spawn in water)
       if (Array.isArray(this.ponds)) {
         for (const pond of this.ponds) {
-          if (distance(candX, candY, pond.x, pond.y) < pond.radius + 40) {
+          if (distance(candX, candY, pond.x, pond.y) < pond.radius + 35) {
             collides = true;
             break;
           }
@@ -344,18 +375,11 @@ export class SurvivalSession {
       return { x: candX, y: candY };
     }
 
-    // High quality deterministic fallbacks spread across open glades
-    const clearSpots = [
-      { x: 1200, y: 1200 },
-      { x: 3000, y: 1200 },
-      { x: 1200, y: 3000 },
-      { x: 3000, y: 3000 },
-      { x: 2100, y: 1500 },
-      { x: 2100, y: 2700 },
-      { x: 1500, y: 2100 },
-      { x: 2700, y: 2100 }
-    ];
-    return clearSpots[idx % clearSpots.length];
+    // High quality sector centers that are open clearings
+    return {
+      x: (assignedSector.minX + assignedSector.maxX) / 2 + (Math.random() * 80 - 40),
+      y: (assignedSector.minY + assignedSector.maxY) / 2 + (Math.random() * 80 - 40)
+    };
   }
 
   initMap() {

@@ -634,6 +634,49 @@ export default function SurvivalCanvas({ state, myPlayerId, keysDownRef, onAim, 
             ctx.setLineDash([]);
           }
 
+          // Reload Progress Ring & Countdown inside Player
+          const isReloading = Boolean(active && active.isReloading && active.reloadEndTime && active.reloadEndTime > Date.now());
+          if (isReloading) {
+            const totalReload = active.reloadTime || 3000;
+            const remainingMs = Math.max(0, active.reloadEndTime - Date.now());
+            const reloadProgress = Math.min(1, Math.max(0, 1 - (remainingMs / totalReload)));
+            const countdownSec = Math.max(1, Math.ceil(remainingMs / 1000));
+
+            // Background circular track around player
+            ctx.beginPath();
+            ctx.arc(0, 0, p.radius + 12, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(15, 23, 42, 0.8)';
+            ctx.lineWidth = 5;
+            ctx.stroke();
+
+            // Clockwise reload sweep arc
+            ctx.beginPath();
+            ctx.arc(
+              0,
+              0,
+              p.radius + 12,
+              -Math.PI / 2,
+              -Math.PI / 2 + Math.PI * 2 * reloadProgress
+            );
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // Inside player center: bold numeric countdown from 3 to 1
+            ctx.save();
+            ctx.rotate(-renderAngle); // keep countdown text upright regardless of aim angle
+            ctx.font = '900 15px "Inter", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3.5;
+            ctx.strokeText(String(countdownSec), 0, 0);
+            ctx.fillStyle = '#fef08a';
+            ctx.fillText(String(countdownSec), 0, 0);
+            ctx.restore();
+          }
+
           ctx.restore();
 
           // Player Name & HP overhead tag
