@@ -107,11 +107,20 @@ export default function RacingGame() {
     };
   }, []);
 
+  // Helper to safely resolve myPlayer from racingState (which is an array of players)
+  const getMyPlayer = useCallback(() => {
+    if (!racingState?.players || !player?.id) return null;
+    if (Array.isArray(racingState.players)) {
+      return racingState.players.find(p => p.id === player.id) || null;
+    }
+    return racingState.players[player.id] || null;
+  }, [racingState, player?.id]);
+
   // Update procedural engine and tire screech audio based on current car speed & drift
   useEffect(() => {
     if (!soundEnabled || !audioCtxRef.current || audioCtxRef.current.state === 'suspended') return;
     const ctx = audioCtxRef.current;
-    const myPlayer = racingState?.players?.[player?.id];
+    const myPlayer = getMyPlayer();
     if (!myPlayer) return;
 
     const speed = Math.hypot(myPlayer.vx || 0, myPlayer.vy || 0);
@@ -184,7 +193,7 @@ export default function RacingGame() {
     const isSpace = code === 'Space' || key === ' ';
     const isShift = code === 'ShiftLeft' || code === 'ShiftRight' || key === 'shift';
 
-    const myPlayer = racingState?.players?.[player?.id];
+    const myPlayer = getMyPlayer();
     const inPit = myPlayer?.inPit;
 
     if (isW) {
@@ -317,7 +326,7 @@ export default function RacingGame() {
     return () => clearInterval(interval);
   }, [sendInputUpdate]);
 
-  const myPlayer = racingState?.players?.[player?.id];
+  const myPlayer = getMyPlayer();
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950 select-none">

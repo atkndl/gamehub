@@ -15,19 +15,38 @@ const PROP_IMAGES = {
   tires_red: '/assets/racing/Objects/tires_red.png',
   tires_white: '/assets/racing/Objects/tires_white.png',
   tribune: '/assets/racing/Objects/tribune_full.png',
+  tribune_empty: '/assets/racing/Objects/tribune_empty.png',
   barrier: '/assets/racing/Objects/barrier_red_race.png',
   cone: '/assets/racing/Objects/cone_straight.png',
   tree: '/assets/racing/Objects/tree_large.png',
+  tree_small: '/assets/racing/Objects/tree_small.png',
   barrel: '/assets/racing/Objects/barrel_red.png',
+  rock: '/assets/racing/Objects/rock1.png',
+  arrow: '/assets/racing/Objects/arrow_yellow.png',
+  lights: '/assets/racing/Objects/lights.png',
+  oil: '/assets/racing/Objects/oil.png',
   crew_red: '/assets/racing/Characters/character_black_red.png',
   crew_blue: '/assets/racing/Characters/character_black_blue.png',
   crew_green: '/assets/racing/Characters/character_black_green.png',
   crew_white: '/assets/racing/Characters/character_black_white.png'
 };
 
+const SPECTATOR_SPRITES = [
+  '/assets/racing/Characters/character_black_red.png',
+  '/assets/racing/Characters/character_black_blue.png',
+  '/assets/racing/Characters/character_black_green.png',
+  '/assets/racing/Characters/character_black_white.png',
+  '/assets/racing/Characters/character_blonde_blue.png',
+  '/assets/racing/Characters/character_blonde_red.png',
+  '/assets/racing/Characters/character_blonde_green.png',
+  '/assets/racing/Characters/character_brown_green.png',
+  '/assets/racing/Characters/character_brown_red.png',
+  '/assets/racing/Characters/character_brown_blue.png',
+  '/assets/racing/Characters/character_brown_white.png'
+];
+
 export default function RacingCanvas({ state, myPlayerId }) {
   const canvasRef = useRef(null);
-  const animFrameRef = useRef(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -38,7 +57,8 @@ export default function RacingCanvas({ state, myPlayerId }) {
 
   const imagesRef = useRef({
     cars: {},
-    props: {}
+    props: {},
+    spectators: []
   });
 
   // Preload Kenney PNG Sprites
@@ -52,6 +72,11 @@ export default function RacingCanvas({ state, myPlayerId }) {
       const img = new Image();
       img.src = src;
       imagesRef.current.props[k] = img;
+    });
+    SPECTATOR_SPRITES.forEach(src => {
+      const img = new Image();
+      img.src = src;
+      imagesRef.current.spectators.push(img);
     });
   }, []);
 
@@ -70,7 +95,9 @@ export default function RacingCanvas({ state, myPlayerId }) {
       const width = canvas.width;
       const height = canvas.height;
       const curState = stateRef.current;
-      const myPlayer = curState?.players?.find(p => p.id === myPlayerId) || curState?.players?.[0];
+      const myPlayer = Array.isArray(curState?.players)
+        ? curState.players.find(p => p.id === myPlayerId) || curState.players[0]
+        : curState?.players?.[myPlayerId];
 
       // Camera Glide
       if (myPlayer) {
@@ -98,75 +125,67 @@ export default function RacingCanvas({ state, myPlayerId }) {
 
       // 2. Render Grass Background with Subtle Mowed Lawn Stripes
       ctx.fillStyle = '#166534';
-      ctx.fillRect(0, 0, track.width, track.height);
-
-      ctx.fillStyle = 'rgba(21, 128, 61, 0.35)';
       for (let x = 0; x < track.width; x += 120) {
-        ctx.fillRect(x, 0, 60, track.height);
+        if ((x / 120) % 2 === 0) {
+          ctx.fillRect(x, 0, 120, track.height);
+        }
       }
 
-      // Outer World Fence Boundary
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 10;
-      ctx.strokeRect(0, 0, track.width, track.height);
+      // 3. Render Asphalt Road with Striped Red/White Curbs
+      ctx.save();
+      const roadPath = new Path2D();
+      track.waypoints.forEach((pt, idx) => {
+        if (idx === 0) roadPath.moveTo(pt.x, pt.y);
+        else roadPath.lineTo(pt.x, pt.y);
+      });
+      roadPath.closePath();
 
-      // 3. Render Asphalt Circuit Track
-      const wps = track.waypoints;
-      const roadR = track.roadWidth / 2;
-
-      // Outer Red/White Striped Curbs (Borders)
-      ctx.lineCap = 'round';
+      // Outer Red & White Curbs (Kerbs)
       ctx.lineJoin = 'round';
-
-      ctx.beginPath();
-      ctx.moveTo(wps[0].x, wps[0].y);
-      for (let i = 1; i < wps.length; i++) ctx.lineTo(wps[i].x, wps[i].y);
-      ctx.closePath();
-      ctx.strokeStyle = '#dc2626'; // Red curb border
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#dc2626'; // Red curb base
       ctx.lineWidth = track.roadWidth + 36;
-      ctx.stroke();
+      ctx.stroke(roadPath);
 
-      // Alternating White Curbs on edges
-      ctx.setLineDash([24, 24]);
-      ctx.strokeStyle = '#f8fafc';
+      // Dash white pattern onto curb edges
+      ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = track.roadWidth + 36;
-      ctx.stroke();
+      ctx.setLineDash([35, 35]);
+      ctx.stroke(roadPath);
       ctx.setLineDash([]);
 
       // Main Dark Asphalt Surface
-      ctx.strokeStyle = '#1e293b'; // Dark race asphalt
+      ctx.strokeStyle = '#1e293b'; // High grip dark asphalt
       ctx.lineWidth = track.roadWidth;
-      ctx.stroke();
+      ctx.stroke(roadPath);
 
-      // Road Centerline Dotted White Markings
-      ctx.beginPath();
-      ctx.moveTo(wps[0].x, wps[0].y);
-      for (let i = 1; i < wps.length; i++) ctx.lineTo(wps[i].x, wps[i].y);
-      ctx.closePath();
-      ctx.setLineDash([32, 40]);
+      // Inner Asphalt Texture
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = track.roadWidth - 24;
+      ctx.stroke(roadPath);
+
+      // Road Centerline Dashed Marking
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
       ctx.lineWidth = 4;
-      ctx.stroke();
+      ctx.setLineDash([30, 30]);
+      ctx.stroke(roadPath);
       ctx.setLineDash([]);
+      ctx.restore();
 
-      // 4. Render Pit Lane
+      // 4. Render Pit Lane (Parallel Road South of Main Straight)
       const pit = track.pitLane;
       ctx.save();
-      // Pit Road Surface
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      // Pit Lane Asphalt
       ctx.beginPath();
       ctx.moveTo(pit.entry.x, pit.entry.y);
       ctx.lineTo(pit.startX, pit.laneY);
       ctx.lineTo(pit.endX, pit.laneY);
       ctx.lineTo(pit.exit.x, pit.exit.y);
-      ctx.strokeStyle = '#334155'; // Slightly lighter asphalt for pit lane
+      ctx.strokeStyle = '#334155';
       ctx.lineWidth = track.pitRoadWidth;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-
-      // Yellow Pit Speed Limiter Solid Edge Lines
-      ctx.strokeStyle = '#eab308';
-      ctx.lineWidth = 5;
       ctx.stroke();
 
       // Pit Lane Center Dashed Line
@@ -179,25 +198,34 @@ export default function RacingCanvas({ state, myPlayerId }) {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // 4 Pit Service Box Markings on Asphalt
+      // 5 Pit Service Box Markings on Asphalt (One designated for each car color)
       pit.bays.forEach(bay => {
+        const isMyBay = myPlayer?.carColor === bay.colorKey;
+
         // Colored bay box
         ctx.strokeStyle = bay.color;
-        ctx.lineWidth = 4;
-        ctx.strokeRect(bay.x - 42, bay.y - 30, 84, 60);
+        ctx.lineWidth = isMyBay ? 5 : 3;
+        ctx.strokeRect(bay.x - 44, bay.y - 30, 88, 60);
 
-        ctx.fillStyle = `${bay.color}25`;
-        ctx.fillRect(bay.x - 42, bay.y - 30, 84, 60);
+        ctx.fillStyle = isMyBay ? `${bay.color}45` : `${bay.color}20`;
+        ctx.fillRect(bay.x - 44, bay.y - 30, 88, 60);
 
         // Box Number & Team Label
-        ctx.font = 'bold 12px sans-serif';
+        ctx.font = 'bold 11px sans-serif';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
-        ctx.fillText(`PİT ${bay.id + 1}`, bay.x, bay.y - 38);
+        ctx.fillText(bay.team.split('/')[1] || `PİT ${bay.id + 1}`, bay.x, bay.y - 38);
 
         // Service Stop Pad Marking inside Box
         ctx.fillStyle = bay.color;
-        ctx.fillRect(bay.x - 25, bay.y - 4, 50, 8);
+        ctx.fillRect(bay.x - 26, bay.y - 4, 52, 8);
+
+        // If it's my car's designated pit bay, draw an indicator arrow!
+        if (isMyBay) {
+          ctx.font = 'bold 12px sans-serif';
+          ctx.fillStyle = '#fde047';
+          ctx.fillText('▼ SENİN GARAJIN', bay.x, bay.y - 52);
+        }
       });
       ctx.restore();
 
@@ -241,16 +269,17 @@ export default function RacingCanvas({ state, myPlayerId }) {
           ctx.lineWidth = 5;
           ctx.lineCap = 'round';
           ctx.stroke();
-          sm.alpha -= 0.0008; // Very slow fade
+          sm.alpha -= 0.0006; // Slow fade
           if (sm.alpha <= 0) skidmarksRef.current.splice(i, 1);
         }
         ctx.restore();
       }
 
-      // 7. Render Environmental Props (Grandstands, Tents, Barriers, Trees, Pit Crew)
+      // 7. Render Environmental Props (Grandstands with spectators, Tents, Barriers, Trees, Lights, Arrows, Rocks)
       track.props.forEach(p => {
         ctx.save();
         if (p.type === 'tribune') {
+          // Draw grandstand structure in 2:1 aspect ratio
           const tribImg = imagesRef.current.props.tribune;
           if (tribImg && tribImg.complete && tribImg.naturalWidth > 0) {
             ctx.drawImage(tribImg, p.x, p.y, p.w, p.h);
@@ -259,6 +288,27 @@ export default function RacingCanvas({ state, myPlayerId }) {
             ctx.fillRect(p.x, p.y, p.w, p.h);
             ctx.fillStyle = '#ef4444';
             ctx.fillRect(p.x, p.y, p.w, 8);
+          }
+
+          // Populate grandstand with spectators in proper 52:36 aspect ratio!
+          const specs = imagesRef.current.spectators;
+          if (specs.length > 0) {
+            // 3 Seating rows
+            const rows = [p.y + 14, p.y + 42, p.y + 70];
+            const specW = 24;
+            const specH = 17; // exact 52:36 aspect ratio (1.41 : 1)
+            const numPerRow = Math.floor((p.w - 18) / (specW + 3));
+
+            rows.forEach((rowY, rIdx) => {
+              for (let col = 0; col < numPerRow; col++) {
+                const specIndex = Math.abs(Math.floor(p.x) + rIdx * 5 + col * 3) % specs.length;
+                const sImg = specs[specIndex];
+                if (sImg && sImg.complete && sImg.naturalWidth > 0) {
+                  const specX = p.x + 10 + col * (specW + 3);
+                  ctx.drawImage(sImg, specX, rowY, specW, specH);
+                }
+              }
+            });
           }
         } else if (p.type === 'barrier') {
           // Pit Wall
@@ -300,6 +350,11 @@ export default function RacingCanvas({ state, myPlayerId }) {
             ctx.fillStyle = '#14532d';
             ctx.fill();
           }
+        } else if (p.type === 'rock') {
+          const rockImg = imagesRef.current.props.rock;
+          if (rockImg && rockImg.complete) {
+            ctx.drawImage(rockImg, p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2);
+          }
         } else if (p.type === 'cone') {
           const coneImg = imagesRef.current.props.cone;
           if (coneImg && coneImg.complete) {
@@ -310,11 +365,29 @@ export default function RacingCanvas({ state, myPlayerId }) {
             ctx.fillStyle = '#f97316';
             ctx.fill();
           }
+        } else if (p.type === 'arrow') {
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.angle || 0);
+          const arrowImg = imagesRef.current.props.arrow;
+          if (arrowImg && arrowImg.complete) {
+            ctx.drawImage(arrowImg, -16, -16, 32, 32);
+          }
+        } else if (p.type === 'light') {
+          // Stadium light pole
+          const lightImg = imagesRef.current.props.lights;
+          if (lightImg && lightImg.complete) {
+            ctx.drawImage(lightImg, p.x - 20, p.y - 20, 40, 40);
+          }
+        } else if (p.type === 'barrel') {
+          const barrelImg = imagesRef.current.props.barrel;
+          if (barrelImg && barrelImg.complete) {
+            ctx.drawImage(barrelImg, p.x - 14, p.y - 14, 28, 28);
+          }
         }
         ctx.restore();
       });
 
-      // Pit Tents & Pit Crew Mechanics next to Pit Bays
+      // Pit Tents & Pit Crew Mechanics next to Pit Bays (5 Team Garages)
       pit.bays.forEach((bay, bIdx) => {
         ctx.save();
         const tentImg = bay.tent === 'tent_red_large.png' ? imagesRef.current.props.tent_red : imagesRef.current.props.tent_blue;
@@ -348,268 +421,206 @@ export default function RacingCanvas({ state, myPlayerId }) {
           } else {
             interp.prevX = interp.x;
             interp.prevY = interp.y;
-            interp.x += (p.x - interp.x) * 0.40;
-            interp.y += (p.y - interp.y) * 0.40;
+            interp.x += (p.x - interp.x) * 0.45;
+            interp.y += (p.y - interp.y) * 0.45;
 
+            // Angle wrap-around interpolation
             let diff = p.angle - interp.angle;
-            while (diff < -Math.PI) diff += Math.PI * 2;
             while (diff > Math.PI) diff -= Math.PI * 2;
-            interp.angle += diff * 0.40;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            interp.angle += diff * 0.45;
           }
 
-          const isSelf = p.id === myPlayerId;
-          const carImg = imagesRef.current.cars[p.carColor || 'red'];
+          // Spawn Tire Skidmarks if drifting
+          if (p.isDrifting || (p.handbrake && Math.hypot(p.vx, p.vy) > 3)) {
+            const cos = Math.cos(interp.angle);
+            const sin = Math.sin(interp.angle);
+            // Left rear tire & right rear tire
+            const lrX = interp.x - cos * 28 - sin * 16;
+            const lrY = interp.y - sin * 28 + cos * 16;
+            const rrX = interp.x - cos * 28 + sin * 16;
+            const rrY = interp.y - sin * 28 - cos * 16;
 
-          // Spawn Tire Skidmarks & Smoke when Drifting
-          if (p.isDrifting && p.speed > 40) {
-            // Rear wheels position
-            const rX1 = interp.x - Math.cos(interp.angle) * 28 - Math.sin(interp.angle) * 16;
-            const rY1 = interp.y - Math.sin(interp.angle) * 28 + Math.cos(interp.angle) * 16;
-            const rX2 = interp.x - Math.cos(interp.angle) * 28 + Math.sin(interp.angle) * 16;
-            const rY2 = interp.y - Math.sin(interp.angle) * 28 - Math.cos(interp.angle) * 16;
-
-            if (interp.prevWheel1) {
-              skidmarksRef.current.push({
-                x1: interp.prevWheel1.x,
-                y1: interp.prevWheel1.y,
-                x2: rX1,
-                y2: rY1,
-                alpha: 0.55
-              });
-              skidmarksRef.current.push({
-                x1: interp.prevWheel2.x,
-                y1: interp.prevWheel2.y,
-                x2: rX2,
-                y2: rY2,
-                alpha: 0.55
-              });
+            if (interp.prevLrX) {
+              skidmarksRef.current.push({ x1: interp.prevLrX, y1: interp.prevLrY, x2: lrX, y2: lrY, alpha: 0.65 });
+              skidmarksRef.current.push({ x1: interp.prevRrX, y1: interp.prevRrY, x2: rrX, y2: rrY, alpha: 0.65 });
             }
-            interp.prevWheel1 = { x: rX1, y: rY1 };
-            interp.prevWheel2 = { x: rX2, y: rY2 };
+            interp.prevLrX = lrX;
+            interp.prevLrY = lrY;
+            interp.prevRrX = rrX;
+            interp.prevRrY = rrY;
 
-            // Smoke puffs
+            // Drift smoke particles
             for (let i = 0; i < 2; i++) {
               particlesRef.current.push({
-                x: (rX1 + rX2) / 2 + (Math.random() - 0.5) * 12,
-                y: (rY1 + rY2) / 2 + (Math.random() - 0.5) * 12,
-                vx: -Math.cos(interp.angle) * 2 + (Math.random() - 0.5) * 3,
-                vy: -Math.sin(interp.angle) * 2 + (Math.random() - 0.5) * 3,
+                x: lrX + (Math.random() - 0.5) * 8,
+                y: lrY + (Math.random() - 0.5) * 8,
+                vx: -p.vx * 0.2 + (Math.random() - 0.5) * 2,
+                vy: -p.vy * 0.2 + (Math.random() - 0.5) * 2,
                 size: 8 + Math.random() * 8,
-                color: 'rgba(226, 232, 240, 0.45)',
-                life: 1.0,
-                decay: 0.04
+                alpha: 0.55,
+                color: 'rgba(241, 245, 249,'
               });
             }
           } else {
-            interp.prevWheel1 = null;
-            interp.prevWheel2 = null;
+            interp.prevLrX = null;
+            interp.prevRrX = null;
           }
 
-          // Nitro Flame Jets from Exhausts
+          // Nitro Flame Exhausts
           if (p.isNitroActive) {
-            const exX = interp.x - Math.cos(interp.angle) * 35;
-            const exY = interp.y - Math.sin(interp.angle) * 35;
-            for (let i = 0; i < 3; i++) {
+            const cos = Math.cos(interp.angle);
+            const sin = Math.sin(interp.angle);
+            const ex1X = interp.x - cos * 38 - sin * 10;
+            const ex1Y = interp.y - sin * 38 + cos * 10;
+            const ex2X = interp.x - cos * 38 + sin * 10;
+            const ex2Y = interp.y - sin * 38 - cos * 10;
+
+            for (let i = 0; i < 2; i++) {
               particlesRef.current.push({
-                x: exX + (Math.random() - 0.5) * 10,
-                y: exY + (Math.random() - 0.5) * 10,
-                vx: -Math.cos(interp.angle) * (8 + Math.random() * 6),
-                vy: -Math.sin(interp.angle) * (8 + Math.random() * 6),
-                size: 6 + Math.random() * 7,
-                color: Math.random() > 0.4 ? '#38bdf8' : '#60a5fa',
-                life: 0.8,
-                decay: 0.08
+                x: ex1X,
+                y: ex1Y,
+                vx: -cos * 8 + (Math.random() - 0.5) * 3,
+                vy: -sin * 8 + (Math.random() - 0.5) * 3,
+                size: 6 + Math.random() * 6,
+                alpha: 0.85,
+                color: 'rgba(56, 189, 248,'
+              });
+              particlesRef.current.push({
+                x: ex2X,
+                y: ex2Y,
+                vx: -cos * 8 + (Math.random() - 0.5) * 3,
+                vy: -sin * 8 + (Math.random() - 0.5) * 3,
+                size: 6 + Math.random() * 6,
+                alpha: 0.85,
+                color: 'rgba(56, 189, 248,'
               });
             }
           }
 
-          // Off-road Grass Particle Spray
-          if (p.onSurface === 'grass' && p.speed > 30) {
-            particlesRef.current.push({
-              x: interp.x + (Math.random() - 0.5) * 20,
-              y: interp.y + (Math.random() - 0.5) * 20,
-              vx: (Math.random() - 0.5) * 4,
-              vy: (Math.random() - 0.5) * 4,
-              size: 4 + Math.random() * 4,
-              color: Math.random() > 0.5 ? '#15803d' : '#854d0e',
-              life: 0.7,
-              decay: 0.05
-            });
-          }
-
-          // Draw Car
+          // Render Car Body
           ctx.save();
           ctx.translate(interp.x, interp.y);
-          // Kenney cars face Up (North). Add Math.PI/2 to align with East 0 rad
-          ctx.rotate(interp.angle + Math.PI / 2);
+          ctx.rotate(interp.angle + Math.PI / 2); // Rotate sprite to match heading
 
           // Car Drop Shadow
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
           ctx.beginPath();
-          ctx.ellipse(4, 6, 24, 38, 0, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+          ctx.ellipse(4, 4, 22, 38, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          if (carImg && carImg.complete && carImg.naturalWidth > 0) {
-            // Original Kenney car sprite size: 71x131 -> draw scaled at 42x78
+          const carImg = imagesRef.current.cars[p.carColor] || imagesRef.current.cars.red;
+          if (carImg && carImg.complete) {
             ctx.drawImage(carImg, -21, -39, 42, 78);
           } else {
-            // Procedural fallback vehicle
-            ctx.fillStyle = p.carModel?.color || '#ef4444';
-            ctx.fillRect(-18, -35, 36, 70);
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(-14, -15, 28, 22);
+            ctx.fillStyle = p.carColor === 'blue' ? '#3b82f6' : '#ef4444';
+            ctx.fillRect(-20, -38, 40, 76);
           }
 
-          // Headlights Beam in Front
-          ctx.beginPath();
-          ctx.moveTo(-12, -38);
-          ctx.lineTo(-24, -90);
-          ctx.lineTo(24, -90);
-          ctx.lineTo(12, -38);
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(254, 240, 138, 0.12)';
-          ctx.fill();
-
-          ctx.restore();
-
-          // Overhead Player Tag (Rank, Name, Speed)
-          ctx.save();
-          ctx.font = 'bold 12px sans-serif';
+          // Player Name & Rank Badge floating above car
+          ctx.rotate(-(interp.angle + Math.PI / 2)); // Counter-rotate text
+          ctx.font = 'bold 13px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillStyle = '#ffffff';
 
-          // Rank Badge
-          const rankText = `P${p.liveRank || p.rank || 1}`;
-          const badgeColor = p.liveRank === 1 ? '#eab308' : (p.liveRank === 2 ? '#94a3b8' : '#b45309');
-          ctx.fillStyle = badgeColor;
-          ctx.fillRect(interp.x - 30, interp.y - 56, 20, 16);
-          ctx.fillStyle = '#000000';
-          ctx.font = '900 10px sans-serif';
-          ctx.fillText(rankText, interp.x - 20, interp.y - 44);
+          // Background pill for nickname
+          const isMe = p.id === myPlayerId;
+          ctx.fillStyle = isMe ? 'rgba(30, 41, 59, 0.9)' : 'rgba(15, 23, 42, 0.75)';
+          ctx.fillRect(-50, -56, 100, 20);
+          ctx.strokeStyle = isMe ? '#f59e0b' : 'rgba(255, 255, 255, 0.2)';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(-50, -56, 100, 20);
 
-          // Name
-          ctx.fillStyle = isSelf ? '#38bdf8' : '#ffffff';
-          ctx.font = 'bold 11px sans-serif';
-          ctx.fillText(`${p.name}`, interp.x + 8, interp.y - 44);
-
-          // If in pit, show PIT STOP service tag
-          if (p.inPit) {
-            ctx.fillStyle = '#eab308';
-            ctx.font = '900 10px sans-serif';
-            ctx.fillText('⚡ PİT SERVİSİ', interp.x, interp.y + 45);
-          }
+          ctx.fillStyle = isMe ? '#fde047' : '#ffffff';
+          ctx.fillText(p.name, 0, -42);
 
           ctx.restore();
         });
       }
 
-      // 9. Update & Render Active Particles (Smoke, Nitro, Sparks)
-      for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-        const pt = particlesRef.current[i];
-        pt.x += pt.vx;
-        pt.y += pt.vy;
-        pt.life -= pt.decay;
-        if (pt.life <= 0) {
-          particlesRef.current.splice(i, 1);
-          continue;
-        }
-
+      // 9. Render Particles (Drift Smoke, Nitro Flames, Sparks)
+      if (particlesRef.current.length > 0) {
         ctx.save();
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
-        ctx.fillStyle = pt.color;
-        ctx.globalAlpha = Math.max(0, pt.life);
-        ctx.fill();
+        for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+          const pt = particlesRef.current[i];
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+          ctx.fillStyle = `${pt.color} ${pt.alpha})`;
+          ctx.fill();
+
+          pt.x += pt.vx;
+          pt.y += pt.vy;
+          pt.size *= 0.96;
+          pt.alpha -= 0.035;
+
+          if (pt.alpha <= 0 || pt.size <= 1) {
+            particlesRef.current.splice(i, 1);
+          }
+        }
         ctx.restore();
       }
 
-      ctx.restore(); // Restore camera transform
-
-      // 10. Start Lights Gantry Overlay during Countdown
+      // 10. Starting Countdown Lights Gantry (Rendered overhead at start line)
       if (curState?.countdownSeconds != null && curState.countdownSeconds > 0) {
         ctx.save();
-        const gW = 280;
-        const gH = 90;
-        const gX = width / 2 - gW / 2;
-        const gY = 60;
+        ctx.translate(1700, 2150);
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
-        ctx.beginPath();
-        ctx.roundRect(gX, gY, gW, gH, 18);
-        ctx.fill();
-        ctx.strokeStyle = '#475569';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+        // Overhead gantry box
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 4;
+        ctx.fillRect(-150, -140, 300, 80);
+        ctx.strokeRect(-150, -140, 300, 80);
 
-        // 5 Starting Light Bulbs
-        const bulbR = 18;
-        const bulbSpacing = 48;
-        const startX = width / 2 - 2 * bulbSpacing;
-
-        for (let b = 0; b < 5; b++) {
-          const bx = startX + b * bulbSpacing;
-          const by = gY + 45;
-
+        // 5 Red Lights
+        for (let i = 0; i < 5; i++) {
+          const lx = -100 + i * 50;
           ctx.beginPath();
-          ctx.arc(bx, by, bulbR, 0, Math.PI * 2);
-          let bulbColor = '#334155'; // Dark off
+          ctx.arc(lx, -100, 16, 0, Math.PI * 2);
 
           if (curState.lightsState === 'red') {
-            bulbColor = '#ef4444'; // Red lights
-          } else if (curState.lightsState === 'yellow' || curState.lightsState === 'yellow_flash') {
-            bulbColor = '#f59e0b'; // Yellow ready
-          } else if (curState.lightsState === 'green') {
-            bulbColor = '#22c55e'; // Green GO!
+            ctx.fillStyle = '#ef4444';
+            ctx.shadowColor = '#ef4444';
+            ctx.shadowBlur = 15;
+          } else if (curState.lightsState === 'yellow') {
+            ctx.fillStyle = '#eab308';
+            ctx.shadowColor = '#eab308';
+            ctx.shadowBlur = 15;
+          } else {
+            ctx.fillStyle = '#22c55e';
+            ctx.shadowColor = '#22c55e';
+            ctx.shadowBlur = 20;
           }
-
-          ctx.fillStyle = bulbColor;
           ctx.fill();
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 2;
-          ctx.stroke();
         }
-
-        ctx.font = '900 13px sans-serif';
-        ctx.fillStyle = '#e2e8f0';
-        ctx.textAlign = 'center';
-        ctx.fillText(
-          curState.lightsState === 'green'
-            ? 'GAZA BAS! BAŞLA!'
-            : `YARIŞ BAŞLIYOR: ${curState.countdownSeconds}`,
-          width / 2,
-          gY + 80
-        );
-
         ctx.restore();
       }
+
+      ctx.restore();
 
       animFrameRef.current = requestAnimationFrame(render);
     };
 
-    render();
+    // Resize Canvas to Window
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    animFrameRef.current = requestAnimationFrame(render);
 
     return () => {
       running = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      window.removeEventListener('resize', handleResize);
     };
   }, [myPlayerId]);
 
-  // Window resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (canvasRef.current) {
-        canvasRef.current.width = window.innerWidth;
-        canvasRef.current.height = window.innerHeight;
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
   return (
-    <div className="fixed inset-0 overflow-hidden bg-emerald-950 select-none">
-      <canvas ref={canvasRef} className="w-full h-full block" />
-    </div>
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full block bg-slate-950 cursor-crosshair"
+    />
   );
 }

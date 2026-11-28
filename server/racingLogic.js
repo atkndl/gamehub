@@ -108,35 +108,52 @@ export const TRACK_CONFIG = {
     { x: 1260, y: 2190, angle: 0 }
   ],
 
-  // Pit Lane Geometry (Parallel to main straight at Y=2330)
+  // Pit Lane Geometry (Parallel to main straight at Y=2340)
   pitLane: {
-    entry: { x: 1100, y: 2150 },
-    exit: { x: 2350, y: 2150 },
-    laneY: 2330,
-    startX: 1180,
-    endX: 2280,
-    // 4 Team Pit Service Bays
+    entry: { x: 1100, y: 2260 },
+    exit: { x: 2350, y: 2260 },
+    laneY: 2340,
+    startX: 1150,
+    endX: 2300,
+    // 5 Team Pit Service Bays (One designated for each car color)
     bays: [
-      { id: 0, team: 'Red Bull / Kırmızı Takım',   x: 1380, y: 2330, color: '#ef4444', tent: 'tent_red_large.png' },
-      { id: 1, team: 'Alpine / Mavi Takım',       x: 1580, y: 2330, color: '#3b82f6', tent: 'tent_blue_large.png' },
-      { id: 2, team: 'Aston / Yeşil Takım',       x: 1780, y: 2330, color: '#10b981', tent: 'tent_red_large.png' },
-      { id: 3, team: 'Ferrari / Sarı Takım',      x: 1980, y: 2330, color: '#f59e0b', tent: 'tent_blue_large.png' }
+      { id: 0, colorKey: 'red',    team: 'Ferrari / Kırmızı Garaj',  x: 1300, y: 2340, color: '#ef4444', tent: 'tent_red_large.png' },
+      { id: 1, colorKey: 'blue',   team: 'Alpine / Mavi Garaj',      x: 1500, y: 2340, color: '#3b82f6', tent: 'tent_blue_large.png' },
+      { id: 2, colorKey: 'green',  team: 'Aston / Yeşil Garaj',      x: 1700, y: 2340, color: '#10b981', tent: 'tent_red_large.png' },
+      { id: 3, colorKey: 'yellow', team: 'Renault / Sarı Garaj',     x: 1900, y: 2340, color: '#f59e0b', tent: 'tent_blue_large.png' },
+      { id: 4, colorKey: 'black',  team: 'Mercedes / Siyah Garaj',   x: 2100, y: 2340, color: '#1e293b', tent: 'tent_blue_large.png' }
     ]
   },
 
   // Environmental Obstacles & Props
   props: [
-    // Grandstands along the main straight
-    { type: 'tribune', x: 1400, y: 1960, w: 220, h: 70 },
-    { type: 'tribune', x: 1700, y: 1960, w: 220, h: 70 },
-    { type: 'tribune', x: 2000, y: 1960, w: 220, h: 70 },
-    { type: 'tribune', x: 2300, y: 1960, w: 220, h: 70 },
+    // Grandstands along the main straight (Proper 2:1 aspect ratio: 220x110)
+    { type: 'tribune', x: 1350, y: 1920, w: 220, h: 110 },
+    { type: 'tribune', x: 1650, y: 1920, w: 220, h: 110 },
+    { type: 'tribune', x: 1950, y: 1920, w: 220, h: 110 },
+    { type: 'tribune', x: 2250, y: 1920, w: 220, h: 110 },
 
-    // Grandstand at turn 1
-    { type: 'tribune', x: 3450, y: 1400, w: 70, h: 260 },
+    // Grandstand at turn 1 and infield
+    { type: 'tribune', x: 3100, y: 1700, w: 220, h: 110 },
+    { type: 'tribune', x: 1650, y: 1300, w: 220, h: 110 },
 
     // Pit Wall separating main straight and pit lane
-    { type: 'barrier', x: 1250, y: 2235, w: 980, h: 20 },
+    { type: 'barrier', x: 1220, y: 2240, w: 1020, h: 18 },
+
+    // Stadium Lights along the fences
+    { type: 'light', x: 1300, y: 1900, radius: 15 },
+    { type: 'light', x: 1600, y: 1900, radius: 15 },
+    { type: 'light', x: 1900, y: 1900, radius: 15 },
+    { type: 'light', x: 2200, y: 1900, radius: 15 },
+    { type: 'light', x: 3300, y: 1900, radius: 15 },
+    { type: 'light', x: 3300, y: 1200, radius: 15 },
+    { type: 'light', x: 1800, y: 480,  radius: 15 },
+
+    // Directional curve arrows
+    { type: 'arrow', x: 3100, y: 2250, angle: -0.6 },
+    { type: 'arrow', x: 3450, y: 1800, angle: -1.5 },
+    { type: 'arrow', x: 3450, y: 1200, angle: -2.3 },
+    { type: 'arrow', x: 2800, y: 620,  angle: 3.14 },
 
     // Outer perimeter tire barriers on curves
     { type: 'tires', x: 3150, y: 2180, radius: 24 },
@@ -150,20 +167,29 @@ export const TRACK_CONFIG = {
     { type: 'tires', x: 400,  y: 1550, radius: 28 },
     { type: 'tires', x: 450,  y: 1750, radius: 28 },
 
-    // Trees inside and outside infield
-    { type: 'tree', x: 1200, y: 1400, radius: 55 },
-    { type: 'tree', x: 1450, y: 1250, radius: 65 },
-    { type: 'tree', x: 1700, y: 1450, radius: 75 },
-    { type: 'tree', x: 2000, y: 1200, radius: 60 },
-    { type: 'tree', x: 2300, y: 1350, radius: 70 },
-    { type: 'tree', x: 2700, y: 1300, radius: 55 },
-    { type: 'tree', x: 950,  y: 1650, radius: 50 },
+    // Trees inside and outside infield (more lush vegetation)
+    { type: 'tree', x: 1100, y: 1400, radius: 55 },
+    { type: 'tree', x: 1300, y: 1150, radius: 65 },
+    { type: 'tree', x: 1500, y: 1450, radius: 50 },
+    { type: 'tree', x: 1750, y: 1150, radius: 75 },
+    { type: 'tree', x: 2000, y: 1400, radius: 60 },
+    { type: 'tree', x: 2250, y: 1150, radius: 70 },
+    { type: 'tree', x: 2500, y: 1400, radius: 55 },
+    { type: 'tree', x: 2750, y: 1150, radius: 65 },
+    { type: 'tree', x: 900,  y: 1650, radius: 50 },
+    { type: 'tree', x: 750,  y: 1450, radius: 60 },
+
+    // Rocks & Barrels
+    { type: 'rock',   x: 1350, y: 1550, radius: 20 },
+    { type: 'rock',   x: 2150, y: 1550, radius: 22 },
+    { type: 'barrel', x: 1180, y: 2280, radius: 14 },
+    { type: 'barrel', x: 2250, y: 2280, radius: 14 },
 
     // Cones near pit entry & exit
-    { type: 'cone', x: 1120, y: 2190, radius: 10 },
-    { type: 'cone', x: 1140, y: 2210, radius: 10 },
-    { type: 'cone', x: 2260, y: 2290, radius: 10 },
-    { type: 'cone', x: 2280, y: 2250, radius: 10 }
+    { type: 'cone', x: 1120, y: 2260, radius: 10 },
+    { type: 'cone', x: 1140, y: 2280, radius: 10 },
+    { type: 'cone', x: 2260, y: 2280, radius: 10 },
+    { type: 'cone', x: 2280, y: 2260, radius: 10 }
   ]
 };
 
@@ -317,28 +343,7 @@ export class RacingSession {
 
   // Check which surface the car is on
   getSurface(x, y) {
-    const pit = this.track.pitLane;
-
-    // Check if inside Pit Lane Bounds
-    if (x >= pit.startX - 60 && x <= pit.endX + 60 && Math.abs(y - pit.laneY) <= this.track.pitRoadWidth / 2 + 10) {
-      // Check if inside specific pit bay stop box
-      for (const bay of pit.bays) {
-        if (Math.abs(x - bay.x) <= 45 && Math.abs(y - bay.y) <= 35) {
-          return { surface: 'pit_box', bayId: bay.id };
-        }
-      }
-      return { surface: 'pit_lane' };
-    }
-
-    // Check Pit Lane entry / exit transition diagonals
-    if (distToSegment({ x, y }, pit.entry, { x: pit.startX, y: pit.laneY }) <= this.track.pitRoadWidth / 2) {
-      return { surface: 'pit_lane' };
-    }
-    if (distToSegment({ x, y }, { x: pit.endX, y: pit.laneY }, pit.exit) <= this.track.pitRoadWidth / 2) {
-      return { surface: 'pit_lane' };
-    }
-
-    // Check Main Track Road Segments
+    // 1. Check Main Track Road Segments FIRST! (Main track always gets full asphalt grip!)
     const wps = this.track.waypoints;
     const roadR = this.track.roadWidth / 2;
     for (let i = 0; i < wps.length; i++) {
@@ -346,6 +351,28 @@ export class RacingSession {
       const w = wps[(i + 1) % wps.length];
       if (distToSegment({ x, y }, v, w) <= roadR) {
         return { surface: 'asphalt' };
+      }
+    }
+
+    // 2. Check Pit Lane Bounds (ONLY when south of pit divider barrier, y >= 2245)
+    const pit = this.track.pitLane;
+    if (y >= 2245 && x >= pit.startX - 60 && x <= pit.endX + 60 && Math.abs(y - pit.laneY) <= this.track.pitRoadWidth / 2 + 15) {
+      // Check if inside specific pit bay stop box
+      for (const bay of pit.bays) {
+        if (Math.abs(x - bay.x) <= 45 && Math.abs(y - bay.y) <= 35) {
+          return { surface: 'pit_box', bayId: bay.id, colorKey: bay.colorKey };
+        }
+      }
+      return { surface: 'pit_lane' };
+    }
+
+    // Check Pit Lane entry / exit transition diagonals (ONLY when south of main track, y >= 2245)
+    if (y >= 2245) {
+      if (distToSegment({ x, y }, pit.entry, { x: pit.startX, y: pit.laneY }) <= this.track.pitRoadWidth / 2) {
+        return { surface: 'pit_lane' };
+      }
+      if (distToSegment({ x, y }, { x: pit.endX, y: pit.laneY }, pit.exit) <= this.track.pitRoadWidth / 2) {
+        return { surface: 'pit_lane' };
       }
     }
 
@@ -394,15 +421,17 @@ export class RacingSession {
       const surfaceInfo = this.getSurface(p.x, p.y);
       p.onSurface = surfaceInfo.surface;
 
-      // Handle Pit Bay Auto-Stop & Service Status
-      if (surfaceInfo.surface === 'pit_box') {
+      // Handle Pit Bay Auto-Stop & Service Status (ONLY for matching car color!)
+      if (surfaceInfo.surface === 'pit_box' && surfaceInfo.colorKey === p.carColor) {
         const baySpeed = Math.hypot(p.vx, p.vy);
-        if (baySpeed < 18) {
+        // Only slow down and initiate pit service if the player is slowing down / stopping into their bay
+        if (baySpeed < 12) {
           p.inPit = true;
-          p.vx *= 0.8;
-          p.vy *= 0.8;
+          p.vx *= 0.65;
+          p.vy *= 0.65;
         }
       } else {
+        // Passing through other team's bay or driving on pit lane -> do NOT trap or stop the car!
         p.inPit = false;
       }
 
@@ -423,7 +452,7 @@ export class RacingSession {
         surfaceFriction = 0.94; // Higher roll resistance
         lateralTraction = 0.55 * tireGripFactor;
       } else if (p.onSurface === 'pit_lane' || p.onSurface === 'pit_box') {
-        surfaceMaxSpeed = 110; // Pit lane speed limiter (110 km/h)
+        surfaceMaxSpeed = 160; // Smooth Pit lane speed limiter (160 km/h)
       }
 
       // Handbrake & Drift Mechanics
